@@ -257,12 +257,24 @@ function createWindow() {
       backgroundThrottling: false,
       disableHtmlFullscreenWindowResize: true,
     },
-    titleBarStyle: 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'default' : 'hidden',
+    ...(process.platform !== 'darwin' ? {
+      titleBarOverlay: {
+        color: '#00000000',
+        symbolColor: '#ffffff',
+        height: 32,
+      },
+    } : {}),
     autoHideMenuBar: true,
     fullscreenable: true,
   });
 
   mainWindowRef = win;
+  if (process.platform !== 'darwin') {
+    win.webContents.on('dom-ready', () => {
+      win.webContents.executeJavaScript("document.body.classList.add('window-controls-overlay')");
+    });
+  }
   win.on('closed', () => {
     if (mainWindowRef === win) mainWindowRef = null;
   });
