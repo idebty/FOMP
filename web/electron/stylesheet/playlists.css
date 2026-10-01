@@ -94,6 +94,7 @@
 }
 
 .pl-detail-cover-wrapper {
+    position: relative;
     width: 232px;
     height: 232px;
     flex: 0 0 auto;
@@ -102,6 +103,20 @@
     background-color: #1c1c1e;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
     cursor: pointer;
+}
+
+.pl-detail-cover-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45) url('../images/upload.svg') center / 32px 32px no-repeat;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.pl-detail-cover-wrapper:hover::after {
+    opacity: 1;
 }
 
 .pl-detail-cover-wrapper img {
