@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Fancy Offline Music Player</title>
+<link rel="stylesheet" href="../stylesheet/persistant.css">
+<link rel="stylesheet" href="../stylesheet/home.css">
+<link rel="stylesheet" href="../stylesheet/playlists.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+</head>
+
+<body>
+
+<div class="sidebar">
+    <div class="sidebar_search">
+        <input type="text" id="sidebar-search" placeholder="Search title, artist, album, year..." autocomplete="off">
+    </div>
+    <div class="sidebar_main">
+    <button class="sidebar_main_btn" id="home" data-nav="home">
+        <img src="../images/home.png" alt="Home" class="btn_icon">
+        <span>Home</span>
+    </button>
+    <button class="sidebar_main_btn" id="playlists" data-nav="playlists">
+        <img src="../images/playlist.png" alt="playlist" class="btn_icon">
+        <span>Playlists</span>
+    </button>
+    </div>
+    <div class="sidebar_footer">
+    <button class="sidebar_btn" data-nav="settings">
+        <img src="../images/settings.png" alt="settings" class="btn_icon">
+        <span>Settings</span>
+    </button>
+   
+    </div>
+</div>
+
+<div class="body_main">
+
+    <div id="grid-view">
+        <div class="header">
+            <div class="header-info">
+                <span>Local Library</span>
+                <h1>Your Playlists</h1>
+                <button class="upload-btn" id="open-create-playlist">+ New Playlist</button>
+            </div>
+        </div>
+
+        <div class="pl-scroll-container">
+            <div class="pl-scroll" id="playlist-scroll"></div>
+        </div>
+    </div>
+
+    <div id="detail-view" style="display:none;">
+        <button class="pl-back-btn control-text-btn" id="back-to-grid">&#8592; Back to Playlists</button>
+
+        <div class="header">
+            <div class="pl-detail-cover-wrapper" id="detail-cover-wrapper" title="Click to change cover">
+                <img id="detail-cover" src="../images/music.png" alt="Cover">
+                <input type="file" id="detail-cover-input" accept="image/*" style="display:none;">
+            </div>
+
+            <div class="header-info">
+                <span>Playlist</span>
+                <h1 id="detail-name" contenteditable="true" spellcheck="false" title="Click to rename"></h1>
+                <div class="pl-detail-actions">
+                    <button class="upload-btn" id="add-existing-btn">+ Add Existing Song</button>
+                    <label class="upload-btn" for="detail-upload">+ Upload New Song</label>
+                    <input type="file" id="detail-upload" multiple accept=".mp3,.wav" style="display:none;">
+                    <button class="upload-btn pl-danger-btn" id="delete-playlist-btn">Delete Playlist</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tracklist-container">
+            <div class="tracklist-header">
+                <div>#</div>
+                <div>Title</div>
+                <div>Album</div>
+                <div></div>
+            </div>
+            <div class="tracklist" id="pl-tracklist"></div>
+        </div>
+
+        <div class="player-bar">
+            <div class="player-progress">
+                <span class="time-label" id="time-current">0:00</span>
+                <input type="range" id="seek-slider" class="seek-slider" min="0" max="0" step="0.1" value="0">
+                <span class="time-label" id="time-duration">0:00</span>
+            </div>
+            <div class="player-main-row">
+                <div class="player-controls">
+                    <button id="shuffle-btn" class="control-text-btn">Shuffle</button>
+                    <button id="prev-btn" class="control-btn"><img src="../images/left.png" alt="Back"></button>
+                    <button id="play-btn" class="control-btn play-btn-circle"><img id="play-icon" src="../images/play.png" alt="Play"></button>
+                    <button id="next-btn" class="control-btn"><img src="../images/right.png" alt="Next"></button>
+                    <button id="repeat-all-btn" class="control-text-btn">Repeat All</button>
+                    <button id="repeat-one-btn" class="control-text-btn">Repeat 1</button>
+                </div>
+                <div class="volume-container">
+                    <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
+                </div>
+                <div class="player-eq">
+    <button id="eq-toggle-btn" class="control-text-btn" title="Equalizer">EQ</button>
+    <div class="eq-panel" id="eq-panel" style="display:none;">
+        <label>Bass<input type="range" id="eq-bass" min="-15" max="15" step="1" value="0"></label>
+        <label>Mid<input type="range" id="eq-mid" min="-15" max="15" step="1" value="0"></label>
+        <label>Treble<input type="range" id="eq-treble" min="-15" max="15" step="1" value="0"></label>
+        <label class="eq-normalize-toggle">
+            <input type="checkbox" id="normalize-toggle">
+            Normalize Volume
+        </label>
+    </div>
+</div>
+            </div>
+            <audio id="main-player"></audio>
+        </div>
+    </div>
+
+</div>
+<div class="pl-modal-backdrop" id="create-modal-backdrop" style="display:none;">
+    <div class="pl-modal">
+        <h2>New Playlist</h2>
+        <input type="text" id="new-playlist-name" placeholder="Playlist name" maxlength="80">
+        <div class="pl-modal-actions">
+            <button class="control-text-btn" id="cancel-create-playlist">Cancel</button>
+            <button class="upload-btn" id="confirm-create-playlist">Create</button>
+        </div>
+    </div>
+</div>
+
+<div class="pl-modal-backdrop" id="add-song-modal-backdrop" style="display:none;">
+    <div class="pl-modal pl-modal-wide">
+        <h2>Add From Library</h2>
+        <input type="text" id="add-song-search" placeholder="Search your library...">
+        <div class="pl-library-list" id="add-song-list"></div>
+        <div class="pl-modal-actions">
+            <button class="upload-btn" id="close-add-song-modal">Done</button>
+        </div>
+    </div>
+</div>
+
+</body>
+<script src="../javascript/persistant.js" defer></script>
+
+<script src="../javascript/playlists.js" defer></script>
+
+</html>

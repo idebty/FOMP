@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Fancy Offline Music Player</title>
+<link rel="stylesheet" href="../stylesheet/persistant.css">
+<link rel="stylesheet" href="../stylesheet/settings.css">
+</head>
+
+<body>
+
+<div class="sidebar">
+    <div class="sidebar_main">
+    <button class="sidebar_main_btn" id="home" data-nav="home">
+        <img src="../images/home.png" alt="Home" class="btn_icon">
+        <span>Home</span></button>
+    <button class="sidebar_main_btn" data-nav="playlists">
+        <img src="../images/playlist.png" alt="playlist" class="btn_icon" >
+        <span>Playlists</span></button>
+
+    </div>
+    <div class="sidebar_footer">
+    <button class="sidebar_btn" data-nav="settings">
+        <img src="../images/settings.png" alt="songs" class="btn_icon">
+        <span>Settings</span></button>
+    
+    </div>
+</div>
+
+<div class="body_main settings-page">
+<a id="href" href="../html/credits.html">Licenses</a>
+<div class="settings-container">
+
+  <div class="settings-section">
+    <div class="settings-section-title">Playback & Output</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Hardware Acceleration</span>
+        <span class="desc">Uses GPU to improve rendering performance. Requires a relaunch to take effect.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="hw-accel-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Startup Page</span>
+        <span class="desc">Choose which view opens when launch completes.</span>
+      </div>
+      <select class="select-dropdown" id="startup-page-select">
+        <option value="home">Home Library</option>
+        <option value="playlists">Playlists</option>
+      </select>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Resume Last Session</span>
+        <span class="desc">Reopen the last playing track and position on launch.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="resume-session-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Default Volume</span>
+        <span class="desc">Initial output gain level for new sessions.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="default-volume-slider" min="0" max="100" value="80">
+        <span class="range-value" id="default-volume-value">80%</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Muted</span>
+        <span class="desc">Start every session with audio muted.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="muted-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Equalizer</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Bass</span>
+        <span class="desc">Low-shelf gain around 200Hz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-bass-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-bass-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Mid</span>
+        <span class="desc">Peaking gain around 1kHz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-mid-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-mid-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Treble</span>
+        <span class="desc">High-shelf gain around 3kHz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-treble-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-treble-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Normalize Volume</span>
+        <span class="desc">Compress dynamic range so tracks sound closer in loudness.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="normalize-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Library</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Watch Folder</span>
+        <span class="desc" id="watch-folder-path">No folder selected. New audio files dropped here are auto-imported.</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="choose-watch-folder-btn">Choose Folder</button>
+        <button class="btn" id="clear-watch-folder-btn">Clear</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Export Backup</span>
+        <span class="desc">Save your library and playlists to a JSON file.</span>
+      </div>
+      <button class="btn btn-primary" id="export-data-btn">Export</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Import Backup</span>
+        <span class="desc">Restore your library and playlists from a JSON backup. This overwrites your current library.</span>
+      </div>
+      <button class="btn" id="import-data-btn">Import</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Danger Zone</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Clear Library</span>
+        <span class="desc">Removes every track from your library. Playlists are kept.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-tracks-btn">Clear Tracks</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Clear Playlists</span>
+        <span class="desc">Deletes every playlist you've created. Tracks are kept.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-playlists-btn">Clear Playlists</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Reset Everything</span>
+        <span class="desc">Wipes tracks and playlists. This cannot be undone.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-all-btn">Reset Everything</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Relaunch App</span>
+        <span class="desc">Restart to apply settings like Hardware Acceleration.</span>
+      </div>
+      <button class="btn" id="relaunch-btn">Relaunch</button>
+    </div>
+  </div>
+
+</div>
+</div>
+</body>
+<script src="../javascript/persistant.js" defer></script>
+<script src="../javascript/settings.js" defer></script>
+</html>

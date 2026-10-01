@@ -1,0 +1,18 @@
+# electron-builder.yml
+appId: com.yourname.fancyofflineplayer
+productName: FancyOfflineMusicPlayer
+icon: icon.ico
+directories:
+  output: dist
+
+files:
+  - "package.json"
+  - "main.js"
+  - "preload.js"
+  - "html/**/*"
+  - "stylesheet/**/*"
+  - "javascript/**/*"
+  - "images/**/*"
+  - "node_modules/jsmediatags/dist/**/*"
+
+asar: true

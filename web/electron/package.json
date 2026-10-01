@@ -1,0 +1,21 @@
+{
+  "name": "fancy-offline-player",
+  "version": "1.0.0",
+  "description": "An offline music player",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "jsmediatags": "^3.9.7"
+  }
+}

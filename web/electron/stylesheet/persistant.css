@@ -1,0 +1,250 @@
+body {
+    background-color: rgb(8, 8, 9);
+    z-index: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  height: 100vh;
+  background-color: #121214;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  font-family: Roboto;
+  border-right: 1px solid #27272a;
+ 
+}
+
+.sidebar_main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  margin-bottom: auto;
+  
+}
+
+
+.sidebar_footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 16px;
+  border-top: 1px solid #27272a;
+}
+
+
+.sidebar_main_btn,
+.sidebar_btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  color: #a1a1aa;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+
+.btn_icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  
+  filter: brightness(0) invert(0.8); 
+}
+
+
+.btn_icon {
+  filter: brightness(0) invert(1);
+}
+
+
+.sidebar_main_btn:hover,
+.sidebar_btn:hover {
+  background-color: #27272a;
+  color: #f4f4f5;
+}
+
+.sidebar_main_btn.active,
+.sidebar_btn.active {
+  background-color: #27272a;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sidebar_btn {
+  font-size: 0.875rem;
+  color: #71717a;
+}
+
+.body_main {
+  top: 0;
+  position: fixed;
+  width: calc(100vw - 240px);
+  height: 100vh;
+  left: 242px;
+  z-index: 2;
+  color: white;
+
+}
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a rgb(8, 8, 9); 
+}
+
+/* WebKit Support (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(8, 8, 9);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a; 
+  border-radius: 6px;
+  border: 2px solid rgb(8, 8, 9); 
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+
+.player-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 90px;
+    background-color: rgba(24, 24, 27, 0.85);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid #27272a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    box-sizing: border-box;
+    z-index: 10;
+}
+
+.player-bar::before {
+    content: '';
+    width: 140px; 
+}
+
+.volume-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 140px;
+}
+
+#volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 4px;
+    background: #3f3f46;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+#volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+#volume-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+#mute-btn {
+  width: 16px;
+  height: 16px;
+}
+
+body, button, input, span, h1, h2 {
+    font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.sidebar_search {
+    padding: 12px 16px;
+}
+
+.sidebar_search input {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: #000000;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.sidebar_search input:focus {
+    outline: none;
+    border-color: #52525b;
+}
+
+
+.player-eq {
+    position: relative;
+}
+
+.eq-panel {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 10px;
+    background-color: #1c1c1e;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 180px;
+    z-index: 20;
+}
+
+.eq-panel label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: #a1a1aa;
+}
+
+.eq-panel input[type="range"] {
+    width: 100%;
+    accent-color: #ffffff;
+}
+
+.eq-normalize-toggle {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 8px !important;
+    margin-top: 4px;
+    font-size: 0.8rem !important;
+    color: #ffffff !important;
+}

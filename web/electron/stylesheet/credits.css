@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
+.credit_text {
+  position: relative;
+  left: 20px;
+  color: #71717a; 
+  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.875rem; 
+  font-weight: 500;
+  transition: color 0.2s ease; 
+}
+
+.credit_text:hover {
+  color: #f4f4f5; 
+}

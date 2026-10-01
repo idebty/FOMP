@@ -1,0 +1,531 @@
+.body_main {
+    top: 0;
+    position: fixed;
+    width: calc(100vw - 240px);
+    height: 100vh;
+    left: 240px;
+    z-index: 2;
+    color: white;
+    background: linear-gradient(180deg, #1c1c1e 0%, #000000 40%);
+    padding: 32px;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.header {
+    display: flex;
+    align-items: flex-end;
+    gap: 24px;
+    padding-bottom: 24px;
+    flex: 0 0 auto;
+}
+
+#header-cover {
+    width: 232px;
+    height: 232px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+    object-fit: cover;
+    border-radius: 8px;
+    background-color: #1c1c1e;
+}
+
+.header-info span {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #a1a1aa;
+}
+
+.header-info h1 {
+    font-size: 5rem;
+    font-weight: 800;
+    margin: 8px 0 24px 0;
+    letter-spacing: -0.04em;
+}
+
+.upload-btn {
+    background-color: #ffffff;
+    color: #000000;
+    padding: 12px 32px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: inline-block;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.upload-btn:hover {
+    background-color: #e4e4e7;
+    transform: scale(1.02);
+}
+
+#file-upload {
+    display: none;
+}
+
+.tracklist-container {
+    margin-top: 20px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 130px;
+}
+
+.tracklist-header {
+    display: grid;
+    grid-template-columns: 40px 1fr 1fr 40px;
+    padding: 8px 16px;
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    border-bottom: 1px solid #27272a;
+    margin-bottom: 16px;
+}
+
+.track-item {
+    display: grid;
+    grid-template-columns: 40px 1fr 1fr 40px;
+    padding: 10px 16px;
+    align-items: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.track-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.track-index {
+    color: #a1a1aa;
+    font-variant-numeric: tabular-nums;
+}
+
+.track-info-col {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.track-cover-wrapper {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.track-cover-wrapper img {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    background-color: #1c1c1e;
+    display: block;
+}
+
+.track-cover-wrapper::after {
+    content: '✎';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: #ffffff;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.track-cover-wrapper:hover::after {
+    opacity: 1;
+}
+
+.cover-upload-input {
+    display: none;
+}
+
+.track-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.track-title {
+    font-size: 0.95rem;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.track-artist {
+    font-size: 0.875rem;
+    color: #a1a1aa;
+}
+
+.track-album {
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    outline: none;
+    border-radius: 4px;
+    padding: 4px 6px;
+    margin: -4px -6px;
+    cursor: text;
+}
+
+.track-album:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.track-album:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0 1px #3f3f46;
+    color: #ffffff;
+}
+
+.remove-track-btn {
+    background: transparent;
+    border: none;
+    color: #71717a;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    opacity: 0;
+    justify-self: center;
+    transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.track-item:hover .remove-track-btn {
+    opacity: 1;
+}
+
+.remove-track-btn:hover {
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.12);
+}
+
+.player-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 108px;
+    background-color: rgba(24, 24, 27, 0.85);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid #27272a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    z-index: 10;
+    box-sizing: border-box;
+    padding: 14px 32px 18px;
+}
+
+/* ---------- Seek / progress row (sits above the controls row) ---------- */
+
+.player-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.time-label {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    min-width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SEEK / SCRUBBER
+   ═══════════════════════════════════════════════════════════════ */
+
+.seek-slider {
+    -webkit-appearance: none;
+    appearance: none;
+
+    flex: 1 1 auto;
+    width: 100%;
+    height: 4px;
+
+    margin: 0;
+    padding: 0;
+
+    background: #3f3f46;
+    border-radius: 999px;
+
+    outline: none;
+    cursor: pointer;
+
+    transition: height 0.15s ease;
+}
+
+
+/* ── Chrome / Edge / Safari ── */
+
+.seek-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #3f3f46;
+    border-radius: 999px;
+}
+
+.seek-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+
+    width: 12px;
+    height: 12px;
+
+    margin-top: -4px;
+
+    border: none;
+    border-radius: 50%;
+
+    background: #ffffff;
+
+    cursor: pointer;
+
+    opacity: 0;
+    transform: scale(0.8);
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+
+
+/* ── Firefox ── */
+
+.seek-slider::-moz-range-track {
+    height: 4px;
+    background: #3f3f46;
+    border-radius: 999px;
+}
+
+.seek-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+
+    border: none;
+    border-radius: 50%;
+
+    background: #ffffff;
+
+    cursor: pointer;
+
+    opacity: 0;
+
+    transform: scale(0.8);
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOVER / FOCUS
+   ═══════════════════════════════════════════════════════════════ */
+
+.seek-slider:hover {
+    height: 6px;
+}
+
+.seek-slider:hover::-webkit-slider-runnable-track {
+    height: 6px;
+}
+
+.seek-slider:hover::-webkit-slider-thumb {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.seek-slider:hover::-moz-range-track {
+    height: 6px;
+}
+
+.seek-slider:hover::-moz-range-thumb {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.seek-slider:focus-visible::-webkit-slider-thumb {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.seek-slider:focus-visible::-moz-range-thumb {
+    opacity: 1;
+    transform: scale(1);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   CURRENT POSITION FILL
+   ═══════════════════════════════════════════════════════════════
+
+   This uses the --progress CSS variable.
+
+   JavaScript should update it like:
+
+   seekSlider.style.setProperty(
+       "--progress",
+       `${percentage}%`
+   );
+
+   ═══════════════════════════════════════════════════════════════ */
+
+.seek-slider {
+    background:
+        linear-gradient(
+            to right,
+            #ffffff 0%,
+            #ffffff var(--progress, 0%),
+            #3f3f46 var(--progress, 0%),
+            #3f3f46 100%
+        );
+}
+
+
+/* Keep the filled track on Chrome/Safari */
+
+.seek-slider::-webkit-slider-runnable-track {
+    background:
+        linear-gradient(
+            to right,
+            #ffffff 0%,
+            #ffffff var(--progress, 0%),
+            #3f3f46 var(--progress, 0%),
+            #3f3f46 100%
+        );
+}
+
+
+/* Controls row: centers .player-controls while .player-volume (or
+   .volume-container on the Playlists page) anchors to the right edge -
+   position:relative here gives it a stable reference regardless of the
+   bar's overall height, instead of hardcoded pixel offsets. */
+/* Keeps controls row aligned horizontally */
+.player-main-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Remove absolute positioning so volume flows naturally to the left of Shuffle */
+.player-volume,
+.volume-container {
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 16px; /* Adds space between volume slider and Shuffle button */
+}
+
+.volume-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    opacity: 0.8;
+    color: #ffffff;
+    padding: 6px;
+    border-radius: 6px;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.volume-btn:hover {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.volume-slider {
+    width: 100px;
+    accent-color: #ffffff;
+    cursor: pointer;
+}
+
+.player-controls {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.control-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.control-btn:hover {
+    opacity: 1;
+}
+
+.control-btn img {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1);
+}
+
+.play-btn-circle {
+    background-color: #ffffff;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    opacity: 1;
+}
+
+.play-btn-circle:hover {
+    transform: scale(1.05);
+}
+
+.play-btn-circle img {
+    filter: brightness(0);
+    width: 20px;
+    height: 20px;
+    margin-left: 2px;
+}
+
+.control-text-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #71717a;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+
+.control-text-btn:hover {
+    color: #ffffff;
+}
+
+.control-text-btn.active {
+    color: #ffffff;
+}
