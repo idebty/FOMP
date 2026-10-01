@@ -71,7 +71,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding-bottom: 130px;
+    margin-bottom: 108px;
+    padding-bottom: 16px;
 }
 
 .tracklist-header {
@@ -128,7 +129,7 @@
 }
 
 .track-cover-wrapper::after {
-    content: '✎';
+    content: '';
     position: absolute;
     inset: 0;
     display: flex;
@@ -138,6 +139,10 @@
     color: #ffffff;
     font-size: 0.9rem;
     border-radius: 6px;
+    background-image: url('../images/upload.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 18px 18px;
     opacity: 0;
     transition: opacity 0.15s;
 }
