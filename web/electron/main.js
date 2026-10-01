@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, protocol, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { Readable } = require('stream');
 const jsmediatags = require('jsmediatags');
 
@@ -29,6 +30,88 @@ if (!fs.existsSync(userDataPath)) {
 const dbPath = path.join(userDataPath, 'music.json');
 const playlistsDbPath = path.join(userDataPath, 'playlists.json');
 const settingsPath = path.join(userDataPath, 'settings.json');
+const artworkDir = path.join(userDataPath, 'artwork');
+fs.mkdirSync(artworkDir, { recursive: true });
+
+const IMAGE_TYPES = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/bmp': '.bmp'
+};
+
+function normalizeArtworkPath(imagePath) {
+  if (typeof imagePath !== 'string' || !imagePath) return '';
+  const absolutePath = path.resolve(userDataPath, imagePath);
+  const relativePath = path.relative(artworkDir, absolutePath);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return '';
+  return fs.existsSync(absolutePath) ? path.join('artwork', relativePath).split(path.sep).join('/') : '';
+}
+
+function saveArtwork(value) {
+  if (typeof value !== 'string' || !value) return '';
+  const existingPath = normalizeArtworkPath(value);
+  if (existingPath) return existingPath;
+
+  const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)$/);
+  if (!match || !IMAGE_TYPES[match[1].toLowerCase()]) return '';
+
+  const extension = IMAGE_TYPES[match[1].toLowerCase()];
+  const filename = `${crypto.randomUUID()}${extension}`;
+  fs.writeFileSync(path.join(artworkDir, filename), Buffer.from(match[2], 'base64'));
+  return `artwork/${filename}`;
+}
+
+function normalizeTrackArtwork(track) {
+  if (!track || typeof track !== 'object') return false;
+  let changed = false;
+  if (typeof track.imageUrl === 'string') {
+    const imagePath = saveArtwork(track.imageUrl);
+    if (imagePath) track.imagePath = imagePath;
+    delete track.imageUrl;
+    changed = true;
+  }
+  if (typeof track.imagePath === 'string') {
+    const imagePath = normalizeArtworkPath(track.imagePath);
+    if (imagePath !== track.imagePath) {
+      track.imagePath = imagePath;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function normalizePlaylistArtwork(playlist) {
+  if (!playlist || typeof playlist !== 'object') return false;
+  let changed = false;
+  if (Object.prototype.hasOwnProperty.call(playlist, 'coverImage')) {
+    const imagePath = saveArtwork(playlist.coverImage);
+    if (imagePath) playlist.coverImagePath = imagePath;
+    delete playlist.coverImage;
+    changed = true;
+  }
+  if (typeof playlist.coverImagePath === 'string') {
+    const imagePath = normalizeArtworkPath(playlist.coverImagePath);
+    if (imagePath !== playlist.coverImagePath) {
+      playlist.coverImagePath = imagePath || null;
+      changed = true;
+    }
+  }
+  (playlist.tracks || []).forEach(track => {
+    if (normalizeTrackArtwork(track)) changed = true;
+  });
+  return changed;
+}
+
+function artworkDataUrl(imagePath) {
+  const normalizedPath = normalizeArtworkPath(imagePath);
+  if (!normalizedPath) return '';
+  const extension = path.extname(normalizedPath).toLowerCase();
+  const mimeType = Object.entries(IMAGE_TYPES).find(([, ext]) => ext === extension)?.[0];
+  if (!mimeType) return '';
+  return `data:${mimeType};base64,${fs.readFileSync(path.join(userDataPath, normalizedPath)).toString('base64')}`;
+}
 
 // settings. read synchronously some valuee like hardware acceleration must be applied before app.whenReady()
 
@@ -114,6 +197,14 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: true,
       stream: true
     }
+  },
+  {
+    scheme: 'artwork',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true
+    }
   }
 ]);
 
@@ -148,23 +239,37 @@ const SUPPORTED_EXTENSIONS = /\.(mp3|wav)$/i;
 
 function readLibrary() {
   if (fs.existsSync(dbPath)) {
-    return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    const library = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    let changed = false;
+    library.forEach(track => {
+      if (normalizeTrackArtwork(track)) changed = true;
+    });
+    if (changed) writeLibrary(library);
+    return library;
   }
   return [];
 }
 
 function writeLibrary(playlist) {
+  playlist.forEach(normalizeTrackArtwork);
   fs.writeFileSync(dbPath, JSON.stringify(playlist, null, 2));
 }
 
 function readPlaylists() {
   if (fs.existsSync(playlistsDbPath)) {
-    return JSON.parse(fs.readFileSync(playlistsDbPath, 'utf8'));
+    const playlists = JSON.parse(fs.readFileSync(playlistsDbPath, 'utf8'));
+    let changed = false;
+    playlists.forEach(playlist => {
+      if (normalizePlaylistArtwork(playlist)) changed = true;
+    });
+    if (changed) writePlaylists(playlists);
+    return playlists;
   }
   return [];
 }
 
 function writePlaylists(playlists) {
+  playlists.forEach(normalizePlaylistArtwork);
   fs.writeFileSync(playlistsDbPath, JSON.stringify(playlists, null, 2));
 }
 
@@ -306,6 +411,23 @@ app.whenReady().then(() => {
   app.setLoginItemSettings({ openAtLogin: false });
   app.setUserTasks([]);
 
+  protocol.handle('artwork', async (request) => {
+    const imagePath = new URL(request.url).searchParams.get('path');
+    const normalizedPath = normalizeArtworkPath(imagePath);
+    if (!normalizedPath) return new Response('Not found', { status: 404 });
+
+    try {
+      const filePath = path.join(userDataPath, normalizedPath);
+      const mimeType = Object.entries(IMAGE_TYPES).find(([, ext]) => ext === path.extname(filePath).toLowerCase())?.[0];
+      if (!mimeType) return new Response('Unsupported image type', { status: 415 });
+      return new Response(fs.readFileSync(filePath), {
+        headers: { 'Content-Type': mimeType, 'Cache-Control': 'no-store' }
+      });
+    } catch (err) {
+      return new Response('Not found', { status: 404 });
+    }
+  });
+
   // ── TRUE STREAMING PROTOCOL (no memory buffering) ──
   protocol.handle('media', async (request) => {
     let filePath;
@@ -361,17 +483,21 @@ const headers = {
       return { success: false, error: 'missing file path' };
     }
     const playlist = readLibrary();
-    if (!playlist.find(t => t.path === trackData.path)) {
-      playlist.push({
+    let track = playlist.find(t => t.path === trackData.path);
+    if (!track) {
+      track = {
         path: trackData.path,
         name: trackData.name || '',
         source: trackData.source || 'local',
         data: trackData.data || {},
-        imageUrl: trackData.imageUrl || ''
-      });
-      writeLibrary(playlist);
+        imagePath: saveArtwork(trackData.imagePath || trackData.imageUrl)
+      };
+      playlist.push(track);
+    } else if (trackData.imageUrl || trackData.imagePath) {
+      track.imagePath = saveArtwork(trackData.imagePath || trackData.imageUrl);
     }
-    return { success: true };
+    writeLibrary(playlist);
+    return { success: true, imagePath: track.imagePath || '' };
   });
 
   ipcMain.handle('remove-track', (event, trackPath) => {
@@ -389,14 +515,16 @@ const headers = {
     const playlist = readLibrary();
     const track = playlist.find(t => t.path === trackPath);
     if (!track) return { success: false, error: 'track not found' };
-    if (typeof changes.imageUrl === 'string') track.imageUrl = changes.imageUrl;
+    if (typeof changes.imageUrl === 'string' || typeof changes.imagePath === 'string') {
+      track.imagePath = saveArtwork(changes.imagePath || changes.imageUrl);
+    }
     if (typeof changes.source !== 'undefined') track.source = changes.source;
     if (typeof changes.album === 'string') {
       track.data = track.data || {};
       track.data.album = changes.album;
     }
     writeLibrary(playlist);
-    return { success: true };
+    return { success: true, imagePath: track.imagePath || '' };
   });
 
   // playlist ipc
@@ -407,7 +535,7 @@ const headers = {
     const newPlaylist = {
       id: makePlaylistId(),
       name: (name || '').trim() || 'Untitled Playlist',
-      coverImage: null,
+      coverImagePath: null,
       tracks: [],
       createdAt: Date.now()
     };
@@ -441,9 +569,10 @@ const headers = {
     const playlists = readPlaylists();
     const playlist = playlists.find(p => p.id === playlistId);
     if (!playlist) return { success: false, error: 'playlist not found' };
-    playlist.coverImage = coverImage || null;
+    playlist.coverImagePath = saveArtwork(coverImage) || null;
+    delete playlist.coverImage;
     writePlaylists(playlists);
-    return { success: true };
+    return { success: true, imagePath: playlist.coverImagePath };
   });
 
   ipcMain.handle('add-track-to-playlist', (event, { playlistId, track } = {}) => {
@@ -460,10 +589,10 @@ const headers = {
       path: track.path,
       name: track.name,
       data: track.data || {},
-      imageUrl: track.imageUrl || ''
+      imagePath: saveArtwork(track.imagePath || track.imageUrl)
     });
     writePlaylists(playlists);
-    return { success: true };
+    return { success: true, imagePath: playlist.tracks[playlist.tracks.length - 1].imagePath };
   });
 
   ipcMain.handle('remove-track-from-playlist', (event, { playlistId, trackPath } = {}) => {
@@ -517,7 +646,28 @@ ipcMain.handle('save-settings', (event, partial) => {
     });
     if (result.canceled || !result.filePath) return { success: false };
     try {
-      const backup = { exportedAt: Date.now(), library: readLibrary(), playlists: readPlaylists() };
+      const backupLibrary = readLibrary().map(track => {
+        const backupTrack = { ...track };
+        const imageUrl = artworkDataUrl(track.imagePath);
+        if (imageUrl) backupTrack.imageUrl = imageUrl;
+        delete backupTrack.imagePath;
+        return backupTrack;
+      });
+      const backupPlaylists = readPlaylists().map(playlist => {
+        const backupPlaylist = { ...playlist };
+        const coverImage = artworkDataUrl(playlist.coverImagePath);
+        if (coverImage) backupPlaylist.coverImage = coverImage;
+        delete backupPlaylist.coverImagePath;
+        backupPlaylist.tracks = (playlist.tracks || []).map(track => {
+          const backupTrack = { ...track };
+          const imageUrl = artworkDataUrl(track.imagePath);
+          if (imageUrl) backupTrack.imageUrl = imageUrl;
+          delete backupTrack.imagePath;
+          return backupTrack;
+        });
+        return backupPlaylist;
+      });
+      const backup = { exportedAt: Date.now(), library: backupLibrary, playlists: backupPlaylists };
       fs.writeFileSync(result.filePath, JSON.stringify(backup, null, 2));
       return { success: true, filePath: result.filePath };
     } catch (err) {
