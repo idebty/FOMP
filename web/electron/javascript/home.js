@@ -35,15 +35,19 @@ function escapeHtml(str) {
 function stripExtension(fileName) {
     return fileName.replace(/\.[^/.]+$/, '');
 }
+
+function artworkSource(track) {
+    if (track?.imageUrl) return track.imageUrl;
+    if (track?.imagePath && window.electronAPI?.toArtworkUrl) {
+        return window.electronAPI.toArtworkUrl(track.imagePath);
+    }
+    return DEFAULT_COVER;
+}
+
 //update the cover img at the top of home
 function updateHeaderCover() {
-    if (currentTrackIndex !== -1 && playlist[currentTrackIndex]?.imageUrl) {
-        headerCover.src = playlist[currentTrackIndex].imageUrl;
-    } else if (playlist.length > 0 && playlist[0]?.imageUrl) {
-        headerCover.src = playlist[0].imageUrl;
-    } else {
-        headerCover.src = DEFAULT_COVER;
-    }
+    const track = currentTrackIndex !== -1 ? playlist[currentTrackIndex] : playlist[0];
+    headerCover.src = artworkSource(track);
 }
 
 function trackMatchesQuery(track, query) {
@@ -79,7 +83,7 @@ function createTrackElement(track, index) {
         <div class="track-index">${index + 1}</div>
         <div class="track-info-col">
             <div class="track-cover-wrapper" title="Click to change cover">
-                <img class="track-cover-img" src="${track.imageUrl || DEFAULT_COVER}">
+                <img class="track-cover-img" src="${artworkSource(track)}">
                 <input type="file" class="cover-upload-input" accept="image/*">
             </div>
             <div class="track-text">
@@ -139,6 +143,13 @@ function handleCoverChange(index, file) {
 
         if (window.electronAPI) {
             window.electronAPI.updateTrack(track.path, { imageUrl: dataUrl })
+                .then(result => {
+                    track.imagePath = result.imagePath || '';
+                    delete track.imageUrl;
+                    const savedImg = tracklist.children[index]?.querySelector('.track-cover-img');
+                    if (savedImg) savedImg.src = artworkSource(track);
+                    updateHeaderCover();
+                })
                 .catch(err => console.error('Failed to save cover:', err));
         }
     };
@@ -365,7 +376,7 @@ function loadLibraryFromDisk() {
                     path: track.path,
                     name: track.name,
                     data: track.data || {},
-                    imageUrl: track.imageUrl || ''
+                    imagePath: track.imagePath || ''
                 });
             });
         renderTracklist();
@@ -651,7 +662,13 @@ function addTrack(filePath, fileName, data, imageUrl, saveToDb = true) {
     renderTracklist();
 
     if (saveToDb && window.electronAPI) {
-        window.electronAPI.saveTrack(trackObj).catch(err => console.error('Failed to save track:', err));
+        window.electronAPI.saveTrack(trackObj).then(result => {
+            if (result.imagePath) {
+                trackObj.imagePath = result.imagePath;
+                delete trackObj.imageUrl;
+                renderTracklist();
+            }
+        }).catch(err => console.error('Failed to save track:', err));
     }
 }
 
