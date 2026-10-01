@@ -62,9 +62,20 @@ function stripExtension(fileName) {
     return fileName.replace(/\.[^/.]+$/, '');
 }
 
+function artworkSource(item) {
+    if (item?.imageUrl) return item.imageUrl;
+    if (item?.imagePath && window.electronAPI?.toArtworkUrl) {
+        return window.electronAPI.toArtworkUrl(item.imagePath);
+    }
+    return DEFAULT_COVER;
+}
+
 function playlistCover(playlist) {
     if (playlist.coverImage) return playlist.coverImage;
-    if (playlist.tracks.length > 0 && playlist.tracks[0].imageUrl) return playlist.tracks[0].imageUrl;
+    if (playlist.coverImagePath && window.electronAPI?.toArtworkUrl) {
+        return window.electronAPI.toArtworkUrl(playlist.coverImagePath);
+    }
+    if (playlist.tracks.length > 0) return artworkSource(playlist.tracks[0]);
     return DEFAULT_COVER;
 }
 
@@ -207,7 +218,11 @@ function openPlaylistDetail(playlistId) {
     plCurrentTrackIndex = -1;
     mainPlayer.pause();
     mainPlayer.removeAttribute('src');
-    if (seekSlider) { seekSlider.value = 0; seekSlider.max = 0; }
+    if (seekSlider) {
+        seekSlider.value = 0;
+        seekSlider.max = 0;
+        seekSlider.style.setProperty('--progress', '0%');
+    }
     if (timeCurrentEl) timeCurrentEl.textContent = '0:00';
     if (timeDurationEl) timeDurationEl.textContent = '0:00';
 
@@ -261,7 +276,7 @@ function createPlaylistTrackElement(track, index) {
         <div class="track-index">${index + 1}</div>
         <div class="track-info-col">
             <div class="track-cover-wrapper">
-                <img class="track-cover-img" src="${track.imageUrl || DEFAULT_COVER}">
+                <img class="track-cover-img" src="${artworkSource(track)}">
             </div>
             <div class="track-text">
                 <span class="track-title">${escapeHtml(track.data?.title || stripExtension(track.name))}</span>
@@ -295,7 +310,11 @@ function removeTrackFromCurrentPlaylist(index) {
         mainPlayer.removeAttribute('src');
         mainPlayer.load();
         plCurrentTrackIndex = -1;
-        if (seekSlider) { seekSlider.value = 0; seekSlider.max = 0; }
+        if (seekSlider) {
+            seekSlider.value = 0;
+            seekSlider.max = 0;
+            seekSlider.style.setProperty('--progress', '0%');
+        }
         if (timeCurrentEl) timeCurrentEl.textContent = '0:00';
         if (timeDurationEl) timeDurationEl.textContent = '0:00';
     } else if (plCurrentTrackIndex > index) {
@@ -344,6 +363,12 @@ detailCoverInput.addEventListener('change', (event) => {
 
         if (window.electronAPI) {
             window.electronAPI.setPlaylistCover(currentPlaylist.id, dataUrl)
+                .then(result => {
+                    currentPlaylist.coverImagePath = result.imagePath || null;
+                    delete currentPlaylist.coverImage;
+                    detailCoverImg.src = playlistCover(currentPlaylist);
+                    renderPlaylistGrid();
+                })
                 .catch(err => console.error('Failed to save playlist cover:', err));
         }
     };
@@ -408,18 +433,30 @@ function formatTime(seconds) {
 }
 
 mainPlayer.addEventListener('loadedmetadata', () => {
-    if (seekSlider) seekSlider.max = mainPlayer.duration || 0;
+    if (seekSlider) {
+        seekSlider.max = mainPlayer.duration || 0;
+        seekSlider.value = 0;
+        seekSlider.style.setProperty('--progress', '0%');
+    }
     if (timeDurationEl) timeDurationEl.textContent = formatTime(mainPlayer.duration);
 });
 
 mainPlayer.addEventListener('timeupdate', () => {
-    if (isSeeking) return; // don't fight the user while they're dragging
-    if (seekSlider) seekSlider.value = mainPlayer.currentTime;
-    if (timeCurrentEl) timeCurrentEl.textContent = formatTime(mainPlayer.currentTime);
+    if (!isSeeking) {
+        if (seekSlider) seekSlider.value = mainPlayer.currentTime;
+        if (timeCurrentEl) timeCurrentEl.textContent = formatTime(mainPlayer.currentTime);
+    }
+    const percentage = mainPlayer.duration
+        ? (mainPlayer.currentTime / mainPlayer.duration) * 100
+        : 0;
+    if (seekSlider) seekSlider.style.setProperty('--progress', `${percentage}%`);
 });
 
 mainPlayer.addEventListener('ended', () => {
-    if (seekSlider) seekSlider.value = 0;
+    if (seekSlider) {
+        seekSlider.value = 0;
+        seekSlider.style.setProperty('--progress', '0%');
+    }
     if (timeCurrentEl) timeCurrentEl.textContent = '0:00';
 });
 
@@ -431,11 +468,18 @@ if (seekSlider) {
     const commitSeek = () => {
         mainPlayer.currentTime = parseFloat(seekSlider.value);
         isSeeking = false;
+        const percentage = mainPlayer.duration
+            ? (mainPlayer.currentTime / mainPlayer.duration) * 100
+            : 0;
+        seekSlider.style.setProperty('--progress', `${percentage}%`);
     };
     seekSlider.addEventListener('mousedown', startSeeking);
     seekSlider.addEventListener('touchstart', startSeeking);
     seekSlider.addEventListener('input', () => {
-        if (timeCurrentEl) timeCurrentEl.textContent = formatTime(parseFloat(seekSlider.value));
+        const value = parseFloat(seekSlider.value);
+        if (timeCurrentEl) timeCurrentEl.textContent = formatTime(value);
+        const percentage = mainPlayer.duration ? (value / mainPlayer.duration) * 100 : 0;
+        seekSlider.style.setProperty('--progress', `${percentage}%`);
     });
     seekSlider.addEventListener('change', commitSeek);
     seekSlider.addEventListener('mouseup', commitSeek);
@@ -687,7 +731,7 @@ function renderAddSongList() {
         const row = document.createElement('div');
         row.className = 'pl-library-row';
         row.innerHTML = `
-            <img src="${track.imageUrl || DEFAULT_COVER}">
+            <img src="${artworkSource(track)}">
             <div class="pl-library-row-text">
                 <span class="title">${escapeHtml(track.data?.title || stripExtension(track.name))}</span>
                 <span class="artist">${escapeHtml(track.data?.artist || 'Unknown Artist')}</span>
@@ -711,6 +755,7 @@ function addExistingTrackToPlaylist(track, buttonEl) {
         path: track.path,
         name: track.name,
         data: track.data || {},
+        imagePath: track.imagePath || '',
         imageUrl: track.imageUrl || ''
     });
     renderDetail();
@@ -722,6 +767,14 @@ function addExistingTrackToPlaylist(track, buttonEl) {
     }
 
     window.electronAPI.addTrackToPlaylist(currentPlaylist.id, track)
+        .then(result => {
+            const addedTrack = currentPlaylist?.tracks.find(item => item.path === track.path);
+            if (addedTrack && result.imagePath) {
+                addedTrack.imagePath = result.imagePath;
+                delete addedTrack.imageUrl;
+                renderDetail();
+            }
+        })
         .catch(err => console.error('Failed to add track to playlist:', err));
 }
 
@@ -784,11 +837,23 @@ function saveAndAttachTrack(filePath, fileName, data, imageUrl) {
     const trackObj = { path: filePath, name: fileName, data, imageUrl: imageUrl || '' };
 
     window.electronAPI.saveTrack(trackObj)
-        .then(() => {
+        .then(result => {
+            if (result.imagePath) {
+                trackObj.imagePath = result.imagePath;
+                delete trackObj.imageUrl;
+            }
             libraryTracks.push(trackObj);
             currentPlaylist.tracks.push({ ...trackObj });
             renderDetail();
             return window.electronAPI.addTrackToPlaylist(currentPlaylist.id, trackObj);
+        })
+        .then(result => {
+            const addedTrack = currentPlaylist?.tracks.find(item => item.path === filePath);
+            if (addedTrack && result.imagePath) {
+                addedTrack.imagePath = result.imagePath;
+                delete addedTrack.imageUrl;
+                renderDetail();
+            }
         })
         .catch(err => console.error('Failed to add uploaded track:', err));
 }
