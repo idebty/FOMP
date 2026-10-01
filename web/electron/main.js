@@ -49,18 +49,38 @@ function normalizeArtworkPath(imagePath) {
   return fs.existsSync(absolutePath) ? path.join('artwork', relativePath).split(path.sep).join('/') : '';
 }
 
+function imageMimeType(format, bytes) {
+  const normalized = typeof format === 'string' ? format.toLowerCase().replace(/^image\//, '') : '';
+  const aliases = { jpg: 'image/jpeg', jpeg: 'image/jpeg', pjpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+  const declaredType = aliases[normalized] || (format && format.toLowerCase());
+  if (declaredType && IMAGE_TYPES[declaredType]) return declaredType;
+
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))) return 'image/gif';
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp';
+  return '';
+}
+
+function saveArtworkBytes(format, data) {
+  const bytes = Buffer.from(data || []);
+  const mimeType = imageMimeType(format, bytes);
+  if (!bytes.length || !mimeType) return '';
+  const extension = IMAGE_TYPES[mimeType];
+  const filename = `${crypto.randomUUID()}${extension}`;
+  fs.writeFileSync(path.join(artworkDir, filename), bytes);
+  return `artwork/${filename}`;
+}
+
 function saveArtwork(value) {
   if (typeof value !== 'string' || !value) return '';
   const existingPath = normalizeArtworkPath(value);
   if (existingPath) return existingPath;
 
   const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)$/);
-  if (!match || !IMAGE_TYPES[match[1].toLowerCase()]) return '';
-
-  const extension = IMAGE_TYPES[match[1].toLowerCase()];
-  const filename = `${crypto.randomUUID()}${extension}`;
-  fs.writeFileSync(path.join(artworkDir, filename), Buffer.from(match[2], 'base64'));
-  return `artwork/${filename}`;
+  if (!match) return '';
+  return saveArtworkBytes(match[1], Buffer.from(match[2], 'base64'));
 }
 
 function normalizeTrackArtwork(track) {
@@ -290,16 +310,49 @@ function notifyLibraryUpdated() {
 //Auto Import Watch Folder
 let watcher = null;
 
-function addWatchedFile(fullPath, filename) {
+function readWatchedMetadata(fullPath) {
+  return new Promise((resolve) => {
+    jsmediatags.read(fullPath, {
+      onSuccess: ({ tags = {} }) => {
+        const picture = tags.picture;
+        const imagePath = picture ? saveArtworkBytes(picture.format, picture.data) : '';
+        resolve({
+          data: {
+            title: tags.title || '',
+            artist: tags.artist || '',
+            album: tags.album || ''
+          },
+          imagePath
+        });
+      },
+      onError: () => resolve(null)
+    });
+  });
+}
+
+async function addWatchedFile(fullPath, filename) {
   if (!SUPPORTED_EXTENSIONS.test(filename)) return;
+  if (readLibrary().some(t => path.resolve(t.path || '') === path.resolve(fullPath))) return;
+  const metadata = path.extname(filename).toLowerCase() === '.mp3'
+    ? await readWatchedMetadata(fullPath)
+    : null;
   const library = readLibrary();
-  if (library.find(t => t.path === fullPath)) return;
-  library.push({
+  if (library.some(t => path.resolve(t.path || '') === path.resolve(fullPath))) return;
+  const data = metadata && metadata.data;
+  const trackData = {
+    title: data && data.title || stripExt(filename),
+    artist: data && data.artist || '',
+    album: data && data.album || ''
+  };
+  const track = {
     path: fullPath,
     name: filename,
     source: 'local',
-    data: { title: stripExt(filename), artist: '', album: '' },
-    imageUrl: ''
+    data: trackData
+  };
+  if (metadata && metadata.imagePath) track.imagePath = metadata.imagePath;
+  library.push({
+    ...track
   });
   writeLibrary(library);
   notifyLibraryUpdated();
