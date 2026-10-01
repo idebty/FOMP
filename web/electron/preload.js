@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readMetadata: (path) => ipcRenderer.invoke('read-metadata', path),
 
   toMediaUrl: (filePath) => 'media://stream/?path=' + encodeURIComponent(filePath),
+  toArtworkUrl: (imagePath) => 'artwork://image/?path=' + encodeURIComponent(imagePath),
 
   getPathForFile: (file) => {
     if (webUtils && typeof webUtils.getPathForFile === 'function') {
