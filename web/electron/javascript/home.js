@@ -502,6 +502,147 @@ repeatOneBtn.addEventListener('click', () => {
 
 mainPlayer.addEventListener('ended', handleTrackEnd);
 
+const hotkeyRepeatTimers = new Map();
+
+function isEditableHotkeyTarget(target) {
+    return target instanceof HTMLInputElement ||
+           target instanceof HTMLTextAreaElement ||
+           target.isContentEditable;
+}
+
+function stopHotkeyRepeat(key) {
+    const timers = hotkeyRepeatTimers.get(key);
+    if (!timers) return;
+    clearTimeout(timers.timeout);
+    clearInterval(timers.interval);
+    hotkeyRepeatTimers.delete(key);
+}
+
+function startHotkeyRepeat(key, action) {
+    if (hotkeyRepeatTimers.has(key)) return;
+    action();
+    const timers = { timeout: null, interval: null };
+    timers.timeout = setTimeout(() => {
+        timers.interval = setInterval(action, 100);
+    }, 100);
+    hotkeyRepeatTimers.set(key, timers);
+}
+
+function togglePlaybackHotkey() {
+    if (playlist.length === 0) return;
+
+    if (mainPlayer.paused) {
+        if (currentTrackIndex === -1) {
+            loadTrack(0);
+        } else {
+            mainPlayer.play().catch(err => console.error('Playback error:', err));
+        }
+    } else {
+        mainPlayer.pause();
+    }
+}
+
+function seekHotkey(seconds) {
+    if (!mainPlayer.src) return;
+
+    const duration = Number.isFinite(mainPlayer.duration)
+        ? mainPlayer.duration
+        : Infinity;
+
+    mainPlayer.currentTime = Math.max(
+        0,
+        Math.min(mainPlayer.currentTime + seconds, duration)
+    );
+}
+
+function changeVolumeHotkey(delta) {
+    const step = parseFloat(volumeSlider?.step) || 0.05;
+    const current = mainPlayer.muted ? 0 : mainPlayer.volume;
+    const value = Math.max(0, Math.min(1, current + delta * step));
+
+    mainPlayer.volume = value;
+    mainPlayer.muted = false;
+
+    if (volumeSlider) {
+        volumeSlider.value = value;
+    }
+
+    updateMuteIcon();
+
+    if (window.electronAPI && window.electronAPI.saveSettings) {
+        window.electronAPI.saveSettings({
+            volume: value,
+            muted: false
+        }).catch(() => {});
+    }
+}
+
+document.addEventListener('keydown', (event) => {
+    if (isEditableHotkeyTarget(event.target)) return;
+
+    if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+
+        if (!event.repeat) {
+            if (event.key === 'ArrowLeft') {
+                playPrev();
+            } else {
+                playNext();
+            }
+        }
+
+        return;
+    }
+
+    if (event.key === ' ') {
+        event.preventDefault();
+
+        if (!event.repeat) {
+            togglePlaybackHotkey();
+        }
+
+        return;
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+
+        startHotkeyRepeat(event.key, () => {
+            seekHotkey(event.key === 'ArrowLeft' ? -5 : 5);
+        });
+
+        return;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+
+        startHotkeyRepeat(event.key, () => {
+            changeVolumeHotkey(event.key === 'ArrowUp' ? 1 : -1);
+        });
+    }
+});
+
+document.addEventListener('keyup', (event) => {
+    if (
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown'
+    ) {
+        stopHotkeyRepeat(event.key);
+    }
+});
+
+window.addEventListener('blur', () => {
+    hotkeyRepeatTimers.forEach((timers) => {
+        clearTimeout(timers.timeout);
+        clearInterval(timers.interval);
+    });
+
+    hotkeyRepeatTimers.clear();
+});
+
 function addTrack(filePath, fileName, data, imageUrl, saveToDb = true) {
     if (playlist.find(t => t.path === filePath)) return;
 
