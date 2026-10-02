@@ -1,6 +1,6 @@
 # Fancy Offline Music Player
 
-A desktop music player built for keeping a local music collection in one place. Add MP3 and WAV files to the library, play them through the built-in controls, organize them into playlists, and keep your settings and library data on your computer. The player reads available track details and cover art, with options to update artwork and album names from the library.
+A desktop music player built for keeping a local music collection in one place. 
 
 ## Features
 
@@ -8,27 +8,11 @@ A desktop music player built for keeping a local music collection in one place. 
 - MP3 metadata and cover art
 - Shuffle, repeat, volume controls, and equalizer
 - Folder watching for new music
-- Library backup and restore
+- MP3/WAV support
+- cover art editing
 
-## Development
-
-```bash
-npm install
-npm start
-```
-
-## Build
-
-```bash
-npm run build
-```
-
-## Built with
-
-- Electron
-- electron-builder
-- jsmediatags
-
-## License
-
-GNU General Public License v3.0
+## Preview
+Home:
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/408ee142-ed1e-4dcb-bb35-4c02c83bfbf6" />
+Playlists:
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/4800dfef-7fa4-4011-bff2-3f14cf7eacc1" />
