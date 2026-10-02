@@ -2,6 +2,8 @@ name: Build apps
 
 on:
   push:
+    paths:
+      - 'web/**'
   pull_request:
   workflow_dispatch:
 
