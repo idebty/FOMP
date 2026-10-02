@@ -42,4 +42,4 @@ Fancy Offline Music Player is ideal for users who want:
 ### Installation
 1. clone the repo, open a shell window inside /web/electron
    and run ```npm run build```
-2. download the githubs actions build. https://github.com/idebty/FOMP/actions/runs/
+2. download the githubs actions build. https://github.com/idebty/FOMP/actions/
