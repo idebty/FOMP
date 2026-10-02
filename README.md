@@ -40,7 +40,6 @@ Fancy Offline Music Player is ideal for users who want:
 - Audio files stored locally on your machine
 
 ### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/idebty/FOMP.git
-   cd FOMP
+1. clone the repo, open a shell window inside /web/electron
+   and run ```npm run build```
+2. download the githubs actions build. https://github.com/idebty/FOMP/actions/runs/
