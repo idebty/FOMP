@@ -1,15 +1,125 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap');
-
-.credit_text {
-  position: relative;
-  left: 20px;
-  color: #71717a; 
-  font-family: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 0.875rem; 
-  font-weight: 500;
-  transition: color 0.2s ease; 
+.credits-page {
+    overflow-y: auto;
+    background: linear-gradient(180deg, #1c1c1e 0%, #000000 42%);
+    padding: 40px;
+    box-sizing: border-box;
 }
 
-.credit_text:hover {
-  color: #f4f4f5; 
+.credits-container {
+    width: 100%;
+    max-width: 1040px;
+    padding-bottom: 48px;
+    box-sizing: border-box;
+    color: #ffffff;
+}
+
+.credits-header {
+    margin: 0 0 28px;
+}
+
+.credits-eyebrow {
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.credits-header h1 {
+    margin: 8px 0 10px;
+    color: #ffffff;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+}
+
+.credits-header p {
+    max-width: 620px;
+    margin: 0;
+    color: #a1a1aa;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.credits-section {
+    padding: 20px 0 8px;
+    border-top: 1px solid #27272a;
+}
+
+.credits-section h2 {
+    margin: 0 0 4px;
+    color: #ffffff;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.credit-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    min-height: 68px;
+    padding: 14px 0;
+    border-bottom: 1px solid #27272a;
+}
+
+.credit-copy {
+    min-width: 0;
+}
+
+.credit-copy h3 {
+    margin: 0 0 4px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.credit-copy p {
+    margin: 0;
+    color: #a1a1aa;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.credit-row > a {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: right;
+    text-decoration: none;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.credit-row > a:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.credit-row > a:focus-visible {
+    outline: 2px solid #71717a;
+    outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+    .credits-page {
+        padding: 32px 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .credits-page {
+        padding: 32px 16px;
+    }
+
+    .credit-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .credit-row > a {
+        margin-left: -12px;
+    }
 }
