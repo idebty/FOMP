@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="../stylesheet/persistant.css">
 <link rel="stylesheet" href="../stylesheet/home.css">
 <link rel="stylesheet" href="../stylesheet/playlists.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<script src="../node_modules/jsmediatags/dist/jsmediatags.min.js"></script>
 </head>
 
 <body>
@@ -24,6 +24,16 @@
         <img src="../images/playlist.png" alt="playlist" class="btn_icon">
         <span>Playlists</span>
     </button>
+    <button class="sidebar_main_btn" id="lyrics-nav-btn" type="button" aria-pressed="false">
+        <img src="../images/music.png" alt="" class="btn_icon">
+        <span>Lyrics</span>
+    </button>
+    </div>
+    <div class="sidebar_albums">
+        <div class="sidebar_section_title">Top songs</div>
+        <div class="sidebar_album_list" id="top-songs-list"></div>
+        <div class="sidebar_section_title">Top playlists</div>
+        <div class="sidebar_album_list" id="top-playlists-list"></div>
     </div>
     <div class="sidebar_footer">
     <button class="sidebar_btn" data-nav="settings">
@@ -82,6 +92,11 @@
         </div>
 
         <div class="player-bar">
+            <div class="mini-track-info" aria-live="polite">
+                <img class="mini-track-cover" id="mini-track-cover" src="../images/music.png" alt="">
+                <div class="mini-track-copy"><strong id="mini-track-title">Nothing playing</strong><span id="mini-track-artist"></span></div>
+            </div>
+            <button id="mini-player-toggle" class="mini-player-toggle" type="button" title="Return to full player" aria-label="Return to full player">↗</button>
             <div class="player-progress">
                 <span class="time-label" id="time-current">0:00</span>
                 <input type="range" id="seek-slider" class="seek-slider" min="0" max="0" step="0.1" value="0">
@@ -116,6 +131,31 @@
         </div>
     </div>
 
+    <section class="lyrics-view" id="lyrics-view" aria-live="polite" aria-label="Lyrics">
+        <button id="fullscreen-exit-btn" class="fullscreen-exit-btn" type="button" title="Exit fullscreen player">Exit fullscreen</button>
+        <div class="lyrics-heading">
+            <img id="lyrics-cover" src="../images/music.png" alt="Album cover">
+            <div class="lyrics-track-info">
+                <span>Lyrics</span>
+                <h2 id="lyrics-title">Nothing playing</h2>
+                <p id="lyrics-artist"></p>
+                <span id="lyrics-status" class="lyrics-status">Play a song to find its lyrics.</span>
+                <div class="lyrics-search-wrap">
+                    <form class="lyrics-search" id="lyrics-search-form">
+                        <input type="search" id="lyrics-search-title" placeholder="Search by song title" aria-label="Search lyrics by song title" aria-controls="lyrics-search-suggestions" aria-expanded="false" aria-haspopup="listbox" autocomplete="off">
+                        <button type="submit" class="upload-btn lyrics-import-btn">Search Lyrics</button>
+                    </form>
+                    <div class="lyrics-search-suggestions" id="lyrics-search-suggestions" role="listbox" aria-label="Song suggestions" hidden></div>
+                </div>
+                <div class="lyrics-actions">
+                    <label class="upload-btn lyrics-import-btn" id="lyrics-import-btn" for="lyrics-import-input">Import Lyrics</label>
+                </div>
+                <input type="file" id="lyrics-import-input" accept=".lrc,.txt,text/plain" style="display:none;">
+            </div>
+        </div>
+        <div class="lyrics-lines" id="lyrics-lines"></div>
+    </section>
+
 </div>
 <div class="pl-modal-backdrop" id="create-modal-backdrop" style="display:none;">
     <div class="pl-modal">
@@ -141,7 +181,7 @@
 
 </body>
 <script src="../javascript/persistant.js" defer></script>
-
+<script src="../javascript/lyrics.js" defer></script>
 <script src="../javascript/playlists.js" defer></script>
 
 </html>
