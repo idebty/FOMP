@@ -43,15 +43,22 @@
     font-weight: 800;
     margin: 8px 0 24px 0;
     letter-spacing: -0.04em;
+    overflow-wrap: anywhere;
 }
 
 .upload-btn {
+    box-sizing: border-box;
+    border: 1px solid transparent;
     background-color: #ffffff;
     color: #000000;
     padding: 12px 32px;
     border-radius: 8px;
+    font-family: inherit;
     font-weight: 600;
     font-size: 0.95rem;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
     cursor: pointer;
     display: inline-block;
     transition: background-color 0.2s, transform 0.1s;
@@ -533,4 +540,210 @@
 
 .control-text-btn.active {
     color: #ffffff;
+}
+
+.lyrics-view {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 108px;
+    left: 240px;
+    z-index: 5;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 32px;
+    background: linear-gradient(180deg, #1c1c1e 0%, #000000 40%);
+}
+
+.lyrics-view.is-visible {
+    display: flex;
+}
+
+.lyrics-heading {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 24px 16px;
+    border-bottom: 1px solid #27272a;
+}
+
+#lyrics-cover {
+    width: 112px;
+    height: 112px;
+    flex: 0 0 112px;
+    object-fit: cover;
+    border-radius: 8px;
+    background-color: #1c1c1e;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.lyrics-track-info {
+    min-width: 0;
+}
+
+.lyrics-track-info > span:first-child {
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.lyrics-track-info h2 {
+    margin: 6px 0;
+    color: #ffffff;
+    font-size: 1.8rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.lyrics-track-info p {
+    margin: 0 0 8px;
+    color: #a1a1aa;
+    font-size: 0.95rem;
+}
+
+.lyrics-status {
+    display: inline-block;
+    color: #71717a;
+    font-size: 0.8rem;
+}
+
+.lyrics-search-wrap {
+    position: relative;
+    width: min(100%, 420px);
+    margin-top: 12px;
+    z-index: 12;
+}
+
+.lyrics-search {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lyrics-search input {
+    width: min(260px, 100%);
+    min-width: 0;
+    flex: 1 1 180px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    color: #ffffff;
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    outline: none;
+}
+
+.lyrics-search input:focus {
+    border-color: #71717a;
+}
+
+.lyrics-search-suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: min(100%, 420px);
+    max-height: 240px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 4px;
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+}
+
+.lyrics-suggestion {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 3px;
+    padding: 9px 11px;
+    color: #ffffff;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.lyrics-suggestion:hover,
+.lyrics-suggestion:focus-visible {
+    background: #27272a;
+    outline: none;
+}
+
+.lyrics-suggestion-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.lyrics-suggestion-details,
+.lyrics-suggestion-empty {
+    color: #a1a1aa;
+    font-size: 0.75rem;
+}
+
+.lyrics-suggestion-empty {
+    margin: 0;
+    padding: 10px 11px;
+}
+
+.lyrics-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.lyrics-import-btn {
+    padding: 8px 16px;
+    font-size: 0.82rem;
+}
+
+.lyrics-lines {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: min(100%, 760px);
+    align-self: center;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 28px 24px 56px;
+    text-align: center;
+}
+
+.lyric-line {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    color: #71717a;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+    white-space: pre-wrap;
+    cursor: default;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+button.lyric-line[data-time] {
+    cursor: pointer;
+}
+
+.lyric-line.active {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.lyrics-empty {
+    margin-top: 56px;
+    color: #71717a;
+    font-size: 1rem;
+    line-height: 1.6;
 }
