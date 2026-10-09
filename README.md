@@ -28,10 +28,18 @@ Fancy Offline Music Player is ideal for users who want:
 ## Preview
 
 ### Home
-<img width="1917" height="1078" alt="Fancy Offline Music Player home screen" src="https://github.com/user-attachments/assets/408ee142-ed1e-4dcb-bb35-4c02c83bfbf6" />
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/34c7b9fc-c96f-4f75-b1c5-306cde170750" />
 
-### Playlists
-<img width="1917" height="1078" alt="Fancy Offline Music Player playlists view" src="https://github.com/user-attachments/assets/4800dfef-7fa4-4011-bff2-3f14cf7eacc1" />
+
+### Full-screen-mode 
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/a42e4743-1efd-49e8-ba46-4098c1ae4ff8" />
+
+### MiniPlayer Medium:
+<img width="394" height="403" alt="image" src="https://github.com/user-attachments/assets/5115cd54-f925-4906-820a-b22e3962ae03" />
+
+### MiniPlayer Small:
+<img width="232" height="241" alt="image" src="https://github.com/user-attachments/assets/60a523af-fe61-43b3-ae14-c41cf866c5bf" />
+
 
 ## Getting Started
 
