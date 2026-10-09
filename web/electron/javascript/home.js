@@ -1,7 +1,26 @@
 const fileUpload = document.getElementById('file-upload');
 const tracklist = document.getElementById('tracklist');
 const headerCover = document.getElementById('header-cover');
+const headerLabel = document.getElementById('header-label');
+const headerTitle = document.getElementById('header-title');
 const mainPlayer = document.getElementById('main-player');
+const miniPlayerToggle = document.getElementById('mini-player-toggle');
+
+function syncMiniTrackInfo(track) {
+    const title = document.getElementById('mini-track-title');
+    const artist = document.getElementById('mini-track-artist');
+    const cover = document.getElementById('mini-track-cover');
+    if (title) title.textContent = track ? (track.data?.title || stripExtension(track.name) || 'Unknown Title') : 'Nothing playing';
+    if (artist) artist.textContent = track?.data?.artist || '';
+    if (cover) cover.src = artworkSource(track);
+}
+
+miniPlayerToggle?.addEventListener('click', async () => {
+    const result = await window.electronAPI?.setMiniPlayerMode(false);
+    if (result === false) {
+        document.body.classList.remove('mini-player-mode');
+    }
+});
 
 const playBtn = document.getElementById('play-btn');
 const prevBtn = document.getElementById('prev-btn');
@@ -22,57 +41,97 @@ let isRepeatAll = false;
 let isRepeatOne = false;
 let appSettings = {};
 let isSeeking = false;
+let selectedAlbum = null;
+let selectedPlaylist = null;
+let playbackQueue = null;
+let playbackSequence = 0;
+let countedPlaybackSequence = -1;
 
-const DEFAULT_COVER = '../images/music.png';
-const SUPPORTED_EXTENSIONS = /\.(mp3|wav)$/i;
+const { DEFAULT_COVER, SUPPORTED_EXTENSIONS, escapeHtml, stripExtension, imageMimeType, artworkSource, albumKey: getAlbumKey, formatTime } = window.musicCommon;
 
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str ?? '';
-    return div.innerHTML;
+const lyricsController = window.createLyricsController({
+    getCurrentTrack: () => playlist[currentTrackIndex] || null
+});
+let lyricsWereOpenBeforeFullscreen = false;
+const fullscreenExitBtn = document.getElementById('fullscreen-exit-btn');
+
+function enterFullscreenPlayer() {
+    lyricsWereOpenBeforeFullscreen = lyricsController.isOpen();
+    window.electronAPI?.setFullscreenPlayer(true).catch(error => console.error('Could not open fullscreen player:', error));
 }
 
-function stripExtension(fileName) {
-    return fileName.replace(/\.[^/.]+$/, '');
-}
+fullscreenExitBtn?.addEventListener('click', () => window.electronAPI?.setFullscreenPlayer(false));
+window.electronAPI?.onFullscreenPlayerState(enabled => {
+    document.body.classList.toggle('fullscreen-player-mode', enabled);
+    if (enabled) lyricsController.open();
+    else if (!lyricsWereOpenBeforeFullscreen) lyricsController.close();
+});
 
-function imageMimeType(format, bytes) {
-    const normalized = String(format || '').trim().toLowerCase();
-    const knownTypes = {
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        'image/jpg': 'image/jpeg',
-        'image/pjpeg': 'image/jpeg',
-        png: 'image/png',
-        gif: 'image/gif',
-        webp: 'image/webp',
-        bmp: 'image/bmp'
-    };
-    const mimeType = knownTypes[normalized] || normalized;
-    if (['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'].includes(mimeType)) {
-        return mimeType;
+document.addEventListener('keydown', async event => {
+    if (event.key.toLowerCase() !== 'f' || event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (!playlist[currentTrackIndex]) return;
+
+    event.preventDefault();
+    if (document.body.classList.contains('fullscreen-player-mode')) {
+        await window.electronAPI?.setFullscreenPlayer(false);
+        return;
     }
 
-    if (bytes?.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-    if (bytes?.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-    if (bytes?.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
-    if (bytes?.length >= 12 && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
-    if (bytes?.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp';
-    return '';
+    lyricsWereOpenBeforeFullscreen = lyricsController.isOpen();
+    if (document.body.classList.contains('mini-player-mode')) {
+        const restored = await window.electronAPI?.setMiniPlayerMode(false);
+        if (restored === false) document.body.classList.remove('mini-player-mode');
+    }
+    await window.electronAPI?.setFullscreenPlayer(true);
+});
+
+function getAlbumTracks(key) {
+    return playlist.filter(track => getAlbumKey(track) === key);
 }
 
-function artworkSource(track) {
-    if (track?.imageUrl) return track.imageUrl;
-    if (track?.imagePath && window.electronAPI?.toArtworkUrl) {
-        return window.electronAPI.toArtworkUrl(track.imagePath);
-    }
-    return DEFAULT_COVER;
+function renderTopSongs() {
+    window.musicCommon.renderMostPlayedSongs(playlist, track => {
+        const index = playlist.findIndex(item => item.path === track.path);
+        if (index < 0) return;
+        selectedAlbum = null;
+        selectedPlaylist = null;
+        playbackQueue = null;
+        showLibraryView();
+        renderTracklist(document.getElementById('sidebar-search')?.value || '');
+        loadTrack(index);
+    });
+}
+
+function renderTopPlaylists() {
+    if (!window.electronAPI?.getPlaylists) return;
+    window.electronAPI.getPlaylists().then(saved => {
+        window.musicCommon.renderMostPlayedPlaylists(playlist, saved || [], item => {
+            window.location.replace(`../html/home.html?playlist=${encodeURIComponent(item.id)}`);
+        });
+    }).catch(error => console.error('Could not load most played playlists:', error));
 }
 
 //update the cover img at the top of home
 function updateHeaderCover() {
-    const track = currentTrackIndex !== -1 ? playlist[currentTrackIndex] : playlist[0];
+    let track;
+    if (selectedPlaylist) {
+        const coverTrack = selectedPlaylist.tracks.find(item => item.imagePath || item.imageUrl) || selectedPlaylist.tracks[0];
+        track = coverTrack;
+        if (headerLabel) headerLabel.textContent = 'Playlist';
+        if (headerTitle) headerTitle.textContent = selectedPlaylist.name;
+    } else if (selectedAlbum) {
+        const albumTracks = getAlbumTracks(selectedAlbum.key);
+        track = albumTracks.find(item => item.imagePath || item.imageUrl) || albumTracks[0];
+        if (headerLabel) headerLabel.textContent = 'Album';
+        if (headerTitle) headerTitle.textContent = selectedAlbum.name;
+    } else {
+        track = currentTrackIndex !== -1 ? playlist[currentTrackIndex] : playlist[0];
+        if (headerLabel) headerLabel.textContent = 'Local Library';
+        if (headerTitle) headerTitle.textContent = 'Your Music';
+    }
     headerCover.src = artworkSource(track);
+    headerCover.alt = selectedPlaylist ? `${selectedPlaylist.name} cover` : selectedAlbum ? `${selectedAlbum.name} cover` : 'Cover';
 }
 
 function trackMatchesQuery(track, query) {
@@ -91,11 +150,18 @@ function trackMatchesQuery(track, query) {
 function renderTracklist(query = '') {
     tracklist.innerHTML = '';
     playlist.forEach((track, index) => {
-        if (trackMatchesQuery(track, query)) {
+        const matchesPlaylist = !playbackQueue || playbackQueue.includes(index);
+        if (matchesPlaylist && (!selectedAlbum || getAlbumKey(track) === selectedAlbum.key) && trackMatchesQuery(track, query)) {
             tracklist.appendChild(createTrackElement(track, index));
         }
     });
     updateHeaderCover();
+    renderTopSongs();
+    renderTopPlaylists();
+}
+
+function showLibraryView() {
+    lyricsController.close();
 }
 
 window.applyLibrarySearch = (query) => renderTracklist(query);
@@ -119,7 +185,15 @@ function createTrackElement(track, index) {
         <div class="track-album" contenteditable="true" spellcheck="false" title="Click to edit album">${escapeHtml(track.data.album || 'Unknown Album')}</div>
         <button class="remove-track-btn" title="Remove song">&#10005;</button>
     `;
-    trackItem.addEventListener('click', () => loadTrack(index));
+    trackItem.addEventListener('click', event => {
+        if (event.detail > 1) return;
+        loadTrack(index);
+    });
+    trackItem.addEventListener('dblclick', event => {
+        if (event.target.closest('button, input, [contenteditable="true"], .track-cover-wrapper')) return;
+        if (currentTrackIndex !== index) loadTrack(index);
+        enterFullscreenPlayer();
+    });
 
     const coverWrapper = trackItem.querySelector('.track-cover-wrapper');
     const coverInput = trackItem.querySelector('.cover-upload-input');
@@ -165,6 +239,7 @@ function handleCoverChange(index, file) {
         const img = tracklist.children[index]?.querySelector('.track-cover-img');
         if (img) img.src = dataUrl;
         updateHeaderCover();
+        renderTopSongs();
 
         if (window.electronAPI) {
             window.electronAPI.updateTrack(track.path, { imageUrl: dataUrl })
@@ -174,6 +249,7 @@ function handleCoverChange(index, file) {
                     const savedImg = tracklist.children[index]?.querySelector('.track-cover-img');
                     if (savedImg) savedImg.src = artworkSource(track);
                     updateHeaderCover();
+        renderTopSongs();
                 })
                 .catch(err => console.error('Failed to save cover:', err));
         }
@@ -186,11 +262,17 @@ function handleAlbumEdit(index, newAlbumText) {
     const track = playlist[index];
     if (!track) return;
 
+    const previousAlbumKey = getAlbumKey(track);
     const newAlbum = newAlbumText.trim() || 'Unknown Album';
     track.data.album = newAlbum;
+    if (selectedAlbum?.key === previousAlbumKey && getAlbumKey(track) !== previousAlbumKey) {
+        selectedAlbum = null;
+    }
 
     const albumEl = tracklist.children[index]?.querySelector('.track-album');
     if (albumEl) albumEl.textContent = newAlbum;
+    updateHeaderCover();
+    renderTopSongs();
 
     if (window.electronAPI) {
         window.electronAPI.updateTrack(track.path, { album: newAlbum })
@@ -257,13 +339,6 @@ if (muteBtn) {
     });
 }
 
-
-function formatTime(seconds) {
-    if (!isFinite(seconds) || seconds < 0) seconds = 0;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
 
 function updateSeekBar() {
     if (!seekSlider || !mainPlayer.duration) {
@@ -367,27 +442,52 @@ if (seekSlider) {
 
 
 let sessionSaveTimer = null;
+let isLeavingPage = false;
+let wasPlayingBeforeLeave = false;
+
+function savePlaybackSnapshot(isPlaying = !mainPlayer.paused) {
+    const track = playlist[currentTrackIndex];
+    if (!track?.path) return;
+    try {
+        sessionStorage.setItem('wuom-playback-snapshot', JSON.stringify({
+            trackPath: track.path,
+            position: Number(mainPlayer.currentTime) || 0,
+            isPlaying: Boolean(isPlaying),
+            savedAt: Date.now()
+        }));
+    } catch (_) {}
+}
 
 function saveSession() {
-    if (!window.electronAPI || appSettings.resumeSession === false) return;
+    if (!window.electronAPI || (appSettings.resumeSession === false && !isLeavingPage)) return;
     const track = playlist[currentTrackIndex];
-    window.electronAPI.saveSettings({
-        lastSession: {
-            trackPath: track ? track.path : null,
-            position: mainPlayer.currentTime || 0
-        }
-    }).catch(() => {});
+    const lastSession = { trackPath: track ? track.path : null, position: mainPlayer.currentTime || 0 };
+    if (isLeavingPage) {
+        lastSession.wasPlaying = wasPlayingBeforeLeave;
+        lastSession.savedAt = Date.now();
+    }
+    window.electronAPI.saveSettings({ lastSession }).catch(() => {});
 }
 
 mainPlayer.addEventListener('timeupdate', () => {
+    savePlaybackSnapshot(!mainPlayer.paused);
     if (sessionSaveTimer) return;
     sessionSaveTimer = setTimeout(() => {
         sessionSaveTimer = null;
         saveSession();
     }, 3000);
 });
-mainPlayer.addEventListener('pause', saveSession);
-window.addEventListener('beforeunload', saveSession);
+mainPlayer.addEventListener('play', () => savePlaybackSnapshot(true));
+mainPlayer.addEventListener('pause', () => {
+    if (!isLeavingPage) savePlaybackSnapshot(false);
+    saveSession();
+});
+window.addEventListener('beforeunload', () => {
+    isLeavingPage = true;
+    wasPlayingBeforeLeave = !mainPlayer.paused;
+    savePlaybackSnapshot(wasPlayingBeforeLeave);
+    saveSession();
+});
 
 
 function loadLibraryFromDisk() {
@@ -401,10 +501,19 @@ function loadLibraryFromDisk() {
                     path: track.path,
                     name: track.name,
                     data: track.data || {},
-                    imagePath: track.imagePath || ''
+                    imagePath: track.imagePath || '',
+                    playCount: Math.max(0, Number(track.playCount) || 0),
+                    lyrics: track.lyrics || null
                 });
             });
-        renderTracklist();
+        const pageQuery = new URLSearchParams(window.location.search);
+        const requestedAlbum = pageQuery.get('album');
+        const matchingTrack = requestedAlbum && playlist.find(track => getAlbumKey(track) === requestedAlbum);
+        if (matchingTrack) selectedAlbum = { key: requestedAlbum, name: matchingTrack.data.album, artist: matchingTrack.data.artist || 'Unknown Artist' };
+        renderTracklist(pageQuery.get('search') || '');
+        renderTopPlaylists();
+        const searchInput = document.getElementById('sidebar-search');
+        if (searchInput && pageQuery.has('search')) searchInput.value = pageQuery.get('search') || '';
         return playlist;
     }).catch(err => {
         console.error('Failed to load saved playlist:', err);
@@ -416,25 +525,71 @@ if (window.electronAPI) {
     Promise.all([
         loadLibraryFromDisk(),
         window.electronAPI.getSettings().catch(() => ({}))
-    ]).then(([, settings]) => {
+    ]).then(async ([, settings]) => {
         appSettings = settings || {};
         applyVolumeSettings();
         applyEqSettings();
 
-        const lastSession = appSettings.lastSession;
-        if (appSettings.resumeSession !== false && lastSession && lastSession.trackPath) {
-            const idx = playlist.findIndex(t => t.path === lastSession.trackPath);
-            if (idx !== -1) {
-                currentTrackIndex = idx;
-                mainPlayer.src = window.electronAPI.toMediaUrl(playlist[idx].path);
-                updateHeaderCover();
-                const resumePosition = lastSession.position || 0;
-                mainPlayer.addEventListener('loadedmetadata', function restorePosition() {
-                    mainPlayer.currentTime = Math.min(resumePosition, mainPlayer.duration || resumePosition);
-                    mainPlayer.removeEventListener('loadedmetadata', restorePosition);
-                });
+        const pageQuery = new URLSearchParams(window.location.search);
+        const requestedTrackPath = pageQuery.get('play');
+        const requestedPlaylistId = pageQuery.get('playlist');
+        if (requestedPlaylistId) {
+            try { sessionStorage.removeItem('wuom-playback-snapshot'); } catch (_) {}
+            const savedPlaylists = await window.electronAPI.getPlaylists().catch(() => []);
+            const requestedPlaylist = (savedPlaylists || []).find(item => String(item.id) === requestedPlaylistId);
+            if (requestedPlaylist) {
+                const queue = (requestedPlaylist.tracks || [])
+                    .map(item => playlist.findIndex(track => track.path === item.path))
+                    .filter(index => index >= 0);
+                if (queue.length) {
+                    playbackQueue = queue;
+                    selectedPlaylist = { ...requestedPlaylist, tracks: queue.map(index => playlist[index]) };
+                    selectedAlbum = null;
+                    renderTracklist(document.getElementById('sidebar-search')?.value || '');
+                    loadTrack(queue[0]);
+                }
+            }
+        } else if (requestedTrackPath) {
+            try { sessionStorage.removeItem('wuom-playback-snapshot'); } catch (_) {}
+            const requestedIndex = playlist.findIndex(track => track.path === requestedTrackPath);
+            if (requestedIndex >= 0) {
+                playbackQueue = null;
+                selectedPlaylist = null;
+                loadTrack(requestedIndex);
+            }
+        } else {
+            let navigationSnapshot = null;
+            try {
+                navigationSnapshot = JSON.parse(sessionStorage.getItem('wuom-playback-snapshot') || 'null');
+                sessionStorage.removeItem('wuom-playback-snapshot');
+            } catch (_) {}
+            const lastSession = appSettings.lastSession;
+            const isRecentSnapshot = navigationSnapshot && Date.now() - Number(navigationSnapshot.savedAt || 0) < 15000;
+            const isRecentSettingsNavigation = lastSession?.savedAt && Date.now() - Number(lastSession.savedAt) < 15000;
+            const restoreState = isRecentSnapshot ? navigationSnapshot : isRecentSettingsNavigation ? lastSession :
+                appSettings.resumeSession !== false ? lastSession : null;
+            const shouldResumePlayback = Boolean((isRecentSnapshot && navigationSnapshot.isPlaying) ||
+                (isRecentSettingsNavigation && lastSession.wasPlaying));
+            if (restoreState?.trackPath) {
+                const idx = playlist.findIndex(t => t.path === restoreState.trackPath);
+                if (idx !== -1) {
+                    currentTrackIndex = idx;
+                    syncMiniTrackInfo(playlist[idx]);
+                    mainPlayer.src = window.electronAPI.toMediaUrl(playlist[idx].path);
+                    updateHeaderCover();
+                    lyricsController.setTrack(playlist[idx]);
+                    const resumePosition = Number(restoreState.position) || 0;
+                    mainPlayer.addEventListener('loadedmetadata', function restorePosition() {
+                        mainPlayer.currentTime = Math.min(resumePosition, mainPlayer.duration || resumePosition);
+                        mainPlayer.removeEventListener('loadedmetadata', restorePosition);
+                        if (shouldResumePlayback) {
+                            mainPlayer.play().catch(error => console.error('Could not resume playback:', error));
+                        }
+                    });
+                }
             }
         }
+        if (new URLSearchParams(window.location.search).get('view') === 'lyrics') lyricsController.open();
     });
 
     window.electronAPI.onLibraryUpdated(() => {
@@ -445,17 +600,38 @@ if (window.electronAPI) {
 function loadTrack(index) {
     if (index < 0 || index >= playlist.length) return;
     const track = playlist[index];
+    syncMiniTrackInfo(track);
     if (!track.path) {
         console.error('Track has no file path, skipping:', track.name);
         return;
     }
 
     currentTrackIndex = index;
+    playbackSequence += 1;
+    countedPlaybackSequence = -1;
     mainPlayer.src = window.electronAPI.toMediaUrl(track.path);
     updateHeaderCover();
+    lyricsController.setTrack(track);
     
     mainPlayer.play().catch(err => console.error("Playback error:", err));
 }
+
+mainPlayer.addEventListener('playing', () => {
+    if (currentTrackIndex < 0 || countedPlaybackSequence === playbackSequence) return;
+    const track = playlist[currentTrackIndex];
+    if (!track) return;
+    countedPlaybackSequence = playbackSequence;
+    track.playCount = Math.max(0, Number(track.playCount) || 0) + 1;
+    renderTopSongs();
+    renderTopPlaylists();
+    if (window.electronAPI?.recordTrackPlay) {
+        window.electronAPI.recordTrackPlay(track.path).then(result => {
+            if (result?.success) track.playCount = result.playCount;
+            renderTopSongs();
+            renderTopPlaylists();
+        }).catch(error => console.error('Failed to save track play count:', error));
+    }
+});
 
 playBtn.addEventListener('click', () => {
     if (playlist.length === 0) return; 
@@ -480,26 +656,29 @@ mainPlayer.addEventListener('pause', () => {
 });
 
 function playNext() {
-    if (playlist.length === 0) return;
-    let nextIndex = currentTrackIndex + 1;
+    const queue = playbackQueue || playlist.map((_, index) => index);
+    if (queue.length === 0) return;
+    const queuePosition = queue.indexOf(currentTrackIndex);
+    let nextPosition = queuePosition + 1;
     
     if (isShuffle) {
-        nextIndex = Math.floor(Math.random() * playlist.length);
-    } else if (nextIndex >= playlist.length) {
+        nextPosition = Math.floor(Math.random() * queue.length);
+    } else if (nextPosition >= queue.length) {
         if (isRepeatAll) {
-            nextIndex = 0;
+            nextPosition = 0;
         } else {
             return;
         }
     }
-    loadTrack(nextIndex);
+    loadTrack(queue[nextPosition]);
 }
 
 function playPrev() {
-    if (playlist.length === 0) return;
-    let prevIndex = currentTrackIndex - 1;
-    if (prevIndex < 0) prevIndex = playlist.length - 1;
-    loadTrack(prevIndex);
+    const queue = playbackQueue || playlist.map((_, index) => index);
+    if (queue.length === 0) return;
+    let previousPosition = queue.indexOf(currentTrackIndex) - 1;
+    if (previousPosition < 0) previousPosition = queue.length - 1;
+    loadTrack(queue[previousPosition]);
 }
 
 function handleTrackEnd() {
