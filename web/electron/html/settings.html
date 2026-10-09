@@ -10,20 +10,34 @@
 <body>
 
 <div class="sidebar">
+    <div class="sidebar_search">
+        <input type="text" id="sidebar-search" placeholder="Search title, artist, album, year..." autocomplete="off">
+    </div>
     <div class="sidebar_main">
-    <button class="sidebar_main_btn" id="home" data-nav="home">
-        <img src="../images/home.png" alt="Home" class="btn_icon">
-        <span>Home</span></button>
-    <button class="sidebar_main_btn" data-nav="playlists">
-        <img src="../images/playlist.png" alt="playlist" class="btn_icon" >
-        <span>Playlists</span></button>
-
+        <button class="sidebar_main_btn" id="home" data-nav="home">
+            <img src="../images/home.png" alt="Home" class="btn_icon">
+            <span>Home</span>
+        </button>
+        <button class="sidebar_main_btn" id="playlists" data-nav="playlists">
+            <img src="../images/playlist.png" alt="Playlists" class="btn_icon">
+            <span>Playlists</span>
+        </button>
+        <button class="sidebar_main_btn" id="lyrics-nav-btn" type="button" data-open-lyrics>
+            <img src="../images/music.png" alt="" class="btn_icon">
+            <span>Lyrics</span>
+        </button>
+    </div>
+    <div class="sidebar_albums">
+        <div class="sidebar_section_title">Top songs</div>
+        <div class="sidebar_album_list" id="top-songs-list"></div>
+        <div class="sidebar_section_title">Top playlists</div>
+        <div class="sidebar_album_list" id="top-playlists-list"></div>
     </div>
     <div class="sidebar_footer">
-    <button class="sidebar_btn" data-nav="settings">
-        <img src="../images/settings.png" alt="songs" class="btn_icon">
-        <span>Settings</span></button>
-    
+        <button class="sidebar_btn" id="settings" data-nav="settings">
+            <img src="../images/settings.png" alt="Settings" class="btn_icon">
+            <span>Settings</span>
+        </button>
     </div>
 </div>
 
@@ -54,6 +68,28 @@
         <option value="home">Home Library</option>
         <option value="playlists">Playlists</option>
       </select>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Automatically Switch to Mini Player</span>
+        <span class="desc">Switch when the window reaches 720 px wide or 480 px tall.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="auto-mini-player-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Keep Mini Player on Top</span>
+        <span class="desc">Keep it above other windows. Minimized windows are never kept on top.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="mini-player-top-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
     </div>
 
     <div class="settings-row">
@@ -146,7 +182,7 @@
         <span class="title">Watch Folder</span>
         <span class="desc" id="watch-folder-path">No folder selected. New audio files dropped here are auto-imported.</span>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div class="settings-actions">
         <button class="btn" id="choose-watch-folder-btn">Choose Folder</button>
         <button class="btn" id="clear-watch-folder-btn">Clear</button>
       </div>
