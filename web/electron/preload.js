@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTrack: (track) => ipcRenderer.invoke('save-track', track),
   removeTrack: (path) => ipcRenderer.invoke('remove-track', path),
   updateTrack: (path, changes) => ipcRenderer.invoke('update-track', { path, changes }),
+  recordTrackPlay: (path) => ipcRenderer.invoke('record-track-play', path),
+  getTrackLyrics: (path) => ipcRenderer.invoke('get-track-lyrics', path),
+  saveTrackLyrics: (path, lyrics) => ipcRenderer.invoke('save-track-lyrics', path, lyrics),
+  findLyrics: (query) => ipcRenderer.invoke('find-lyrics', query),
+  suggestLyrics: (query) => ipcRenderer.invoke('suggest-lyrics', query),
   readMetadata: (path) => ipcRenderer.invoke('read-metadata', path),
 
   toMediaUrl: (filePath) => 'media://stream/?path=' + encodeURIComponent(filePath),
@@ -34,5 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importData: () => ipcRenderer.invoke('import-data'),
   clearLibraryData: (options) => ipcRenderer.invoke('clear-library', options),
   relaunchApp: () => ipcRenderer.invoke('relaunch-app'),
+  setMiniPlayerMode: (enabled) => ipcRenderer.invoke('set-mini-player-mode', Boolean(enabled)),
+  setFullscreenPlayer: (enabled) => ipcRenderer.invoke('set-fullscreen-player', Boolean(enabled)),
+  onFullscreenPlayerState: (callback) => ipcRenderer.on('fullscreen-player-state', (_event, enabled) => callback(enabled)),
   onLibraryUpdated: (callback) => ipcRenderer.on('library-updated', callback)
 });
