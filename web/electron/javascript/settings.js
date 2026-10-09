@@ -1,6 +1,8 @@
 // settings.js
 const hwAccelToggle = document.getElementById('hw-accel-toggle');
 const startupPageSelect = document.getElementById('startup-page-select');
+const autoMiniPlayerToggle = document.getElementById('auto-mini-player-toggle');
+const miniPlayerTopToggle = document.getElementById('mini-player-top-toggle');
 const resumeSessionToggle = document.getElementById('resume-session-toggle');
 const defaultVolumeSlider = document.getElementById('default-volume-slider');
 const defaultVolumeValue = document.getElementById('default-volume-value');
@@ -35,6 +37,8 @@ async function loadSettings() {
 
     hwAccelToggle.checked = settings.hardwareAcceleration !== false;
     startupPageSelect.value = settings.startupPage || 'home';
+    autoMiniPlayerToggle.checked = settings.autoMiniPlayer !== false;
+    miniPlayerTopToggle.checked = settings.miniPlayerAlwaysOnTop !== false;
     resumeSessionToggle.checked = settings.resumeSession !== false;
 
     const volumePercent = Math.round((typeof settings.volume === 'number' ? settings.volume : 1) * 100);
@@ -68,6 +72,14 @@ hwAccelToggle.addEventListener('change', () => {
 
 startupPageSelect.addEventListener('change', () => {
     saveSettings({ startupPage: startupPageSelect.value });
+});
+
+autoMiniPlayerToggle.addEventListener('change', () => {
+    saveSettings({ autoMiniPlayer: autoMiniPlayerToggle.checked });
+});
+
+miniPlayerTopToggle.addEventListener('change', () => {
+    saveSettings({ miniPlayerAlwaysOnTop: miniPlayerTopToggle.checked });
 });
 
 resumeSessionToggle.addEventListener('change', () => {
