@@ -1,10 +1,11 @@
-const DEFAULT_COVER = '../images/music.png';
-const SUPPORTED_EXTENSIONS = /\.(mp3|wav)$/i;
+const { DEFAULT_COVER, SUPPORTED_EXTENSIONS, escapeHtml, stripExtension, imageMimeType, artworkSource, formatTime } = window.musicCommon;
 
 let playlists = [];
 let libraryTracks = [];
 let currentPlaylist = null;
 let plCurrentTrackIndex = -1;
+let plPlaybackGeneration = 0;
+let plCountedPlaybackGeneration = -1;
 let lastVolume = 1;
 let isShuffle = false;
 let isRepeatAll = false;
@@ -47,52 +48,75 @@ const addSongList = document.getElementById('add-song-list');
 const closeAddSongModalBtn = document.getElementById('close-add-song-modal');
 
 const mainPlayer = document.getElementById('main-player');
+const miniPlayerToggle = document.getElementById('mini-player-toggle');
+
+function syncMiniTrackInfo(track) {
+    const title = document.getElementById('mini-track-title');
+    const artist = document.getElementById('mini-track-artist');
+    const cover = document.getElementById('mini-track-cover');
+    if (title) title.textContent = track ? (track.data?.title || stripExtension(track.name) || 'Unknown Title') : 'Nothing playing';
+    if (artist) artist.textContent = track?.data?.artist || '';
+    if (cover) cover.src = artworkSource(track);
+}
+
+miniPlayerToggle?.addEventListener('click', async () => {
+    const result = await window.electronAPI?.setMiniPlayerMode(false);
+    if (result === false) {
+        document.body.classList.remove('mini-player-mode');
+    }
+});
+const lyricsController = window.createLyricsController({
+    getCurrentTrack: () => currentPlaylist?.tracks[plCurrentTrackIndex] || null
+});
+let lyricsWereOpenBeforeFullscreen = false;
+const fullscreenExitBtn = document.getElementById('fullscreen-exit-btn');
+
+function enterFullscreenPlayer() {
+    lyricsWereOpenBeforeFullscreen = lyricsController.isOpen();
+    window.electronAPI?.setFullscreenPlayer(true).catch(error => console.error('Could not open fullscreen player:', error));
+}
+
+fullscreenExitBtn?.addEventListener('click', () => window.electronAPI?.setFullscreenPlayer(false));
+window.electronAPI?.onFullscreenPlayerState(enabled => {
+    document.body.classList.toggle('fullscreen-player-mode', enabled);
+    if (enabled) lyricsController.open();
+    else if (!lyricsWereOpenBeforeFullscreen) lyricsController.close();
+});
+
+document.addEventListener('keydown', async event => {
+    if (event.key.toLowerCase() !== 'f' || event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (!currentPlaylist?.tracks[plCurrentTrackIndex]) return;
+
+    event.preventDefault();
+    if (document.body.classList.contains('fullscreen-player-mode')) {
+        await window.electronAPI?.setFullscreenPlayer(false);
+        return;
+    }
+
+    lyricsWereOpenBeforeFullscreen = lyricsController.isOpen();
+    if (document.body.classList.contains('mini-player-mode')) {
+        const restored = await window.electronAPI?.setMiniPlayerMode(false);
+        if (restored === false) document.body.classList.remove('mini-player-mode');
+    }
+    await window.electronAPI?.setFullscreenPlayer(true);
+});
 const playBtn = document.getElementById('play-btn');
 const playIcon = document.getElementById('play-icon');
 const prevBtn = document.getElementById('prev-btn');
 const nextBtn = document.getElementById('next-btn');
 
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str ?? '';
-    return div.innerHTML;
-}
-
-function stripExtension(fileName) {
-    return fileName.replace(/\.[^/.]+$/, '');
-}
-
-function imageMimeType(format, bytes) {
-    const normalized = String(format || '').trim().toLowerCase();
-    const knownTypes = {
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        'image/jpg': 'image/jpeg',
-        'image/pjpeg': 'image/jpeg',
-        png: 'image/png',
-        gif: 'image/gif',
-        webp: 'image/webp',
-        bmp: 'image/bmp'
-    };
-    const mimeType = knownTypes[normalized] || normalized;
-    if (['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'].includes(mimeType)) {
-        return mimeType;
+function renderSidebarShortcuts() {
+    window.musicCommon.renderMostPlayedSongs(libraryTracks, track => {
+        window.location.replace(`../html/home.html?play=${encodeURIComponent(track.path)}`);
+    });
+    if (window.electronAPI?.getPlaylists) {
+        window.electronAPI.getPlaylists().then(saved => {
+            window.musicCommon.renderMostPlayedPlaylists(libraryTracks, saved || [], playlist => {
+                window.location.replace(`../html/home.html?playlist=${encodeURIComponent(playlist.id)}`);
+            });
+        }).catch(error => console.error('Could not load most played playlists:', error));
     }
-
-    if (bytes?.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-    if (bytes?.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-    if (bytes?.length >= 6 && String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF8')) return 'image/gif';
-    if (bytes?.length >= 12 && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
-    if (bytes?.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp';
-    return '';
-}
-
-function artworkSource(item) {
-    if (item?.imageUrl) return item.imageUrl;
-    if (item?.imagePath && window.electronAPI?.toArtworkUrl) {
-        return window.electronAPI.toArtworkUrl(item.imagePath);
-    }
-    return DEFAULT_COVER;
 }
 
 function playlistCover(playlist) {
@@ -121,6 +145,7 @@ function loadLibrary() {
     if (!window.electronAPI) return Promise.resolve([]);
     return window.electronAPI.getPlaylist().then(saved => {
         libraryTracks = (saved || []).filter(t => t.path);
+        renderSidebarShortcuts();
         return libraryTracks;
     }).catch(err => {
         console.error('Failed to load library:', err);
@@ -250,6 +275,7 @@ function openPlaylistDetail(playlistId) {
     }
     if (timeCurrentEl) timeCurrentEl.textContent = '0:00';
     if (timeDurationEl) timeDurationEl.textContent = '0:00';
+    lyricsController.setTrack(null);
 
     gridView.style.display = 'none';
     detailView.style.display = 'flex';
@@ -261,6 +287,7 @@ function backToGrid() {
     detailView.style.display = 'none';
     gridView.style.display = 'flex';
     currentPlaylist = null;
+    lyricsController.setTrack(null);
     renderPlaylistGrid();
 }
 
@@ -312,7 +339,15 @@ function createPlaylistTrackElement(track, index) {
         <button class="remove-track-btn" title="Remove from playlist">&#10005;</button>
     `;
 
-    trackItem.addEventListener('click', () => loadPlTrack(index));
+    trackItem.addEventListener('click', event => {
+        if (event.detail > 1) return;
+        loadPlTrack(index);
+    });
+    trackItem.addEventListener('dblclick', event => {
+        if (event.target.closest('button, input, [contenteditable="true"]')) return;
+        if (plCurrentTrackIndex !== index) loadPlTrack(index);
+        enterFullscreenPlayer();
+    });
 
     const removeBtn = trackItem.querySelector('.remove-track-btn');
     removeBtn.addEventListener('click', (event) => {
@@ -326,6 +361,7 @@ function createPlaylistTrackElement(track, index) {
 function removeTrackFromCurrentPlaylist(index) {
     if (!currentPlaylist) return;
     const track = currentPlaylist.tracks[index];
+    syncMiniTrackInfo(track);
     if (!track) return;
 
     currentPlaylist.tracks.splice(index, 1);
@@ -335,6 +371,7 @@ function removeTrackFromCurrentPlaylist(index) {
         mainPlayer.removeAttribute('src');
         mainPlayer.load();
         plCurrentTrackIndex = -1;
+        lyricsController.setTrack(null);
         if (seekSlider) {
             seekSlider.value = 0;
             seekSlider.max = 0;
@@ -427,7 +464,10 @@ function loadPlTrack(index) {
     if (!track.path || !window.electronAPI) return;
 
     plCurrentTrackIndex = index;
+    plPlaybackGeneration += 1;
+    plCountedPlaybackGeneration = -1;
     mainPlayer.src = window.electronAPI.toMediaUrl(track.path);
+    lyricsController.setTrack(track);
     mainPlayer.play().catch(err => console.error('Playback error:', err));
     updateNowPlayingHighlight();
 }
@@ -448,14 +488,36 @@ playBtn.addEventListener('click', () => {
 
 mainPlayer.addEventListener('play', () => { playIcon.src = '../images/pause.png'; });
 mainPlayer.addEventListener('pause', () => { playIcon.src = '../images/play.png'; });
+window.addEventListener('beforeunload', () => {
+    const track = currentPlaylist?.tracks[plCurrentTrackIndex];
+    if (!track?.path) return;
+    const navigationState = {
+        trackPath: track.path,
+        position: Number(mainPlayer.currentTime) || 0,
+        isPlaying: !mainPlayer.paused,
+        savedAt: Date.now()
+    };
+    try { sessionStorage.setItem('wuom-playback-snapshot', JSON.stringify(navigationState)); } catch (_) {}
+    window.electronAPI?.saveSettings?.({
+        lastSession: { ...navigationState, wasPlaying: navigationState.isPlaying }
+    }).catch(() => {});
+});
+mainPlayer.addEventListener('playing', () => {
+    if (!currentPlaylist || plCurrentTrackIndex < 0 || plCountedPlaybackGeneration === plPlaybackGeneration) return;
+    const track = currentPlaylist.tracks[plCurrentTrackIndex];
+    if (!track) return;
+    plCountedPlaybackGeneration = plPlaybackGeneration;
+    if (window.electronAPI?.recordTrackPlay) {
+        window.electronAPI.recordTrackPlay(track.path).then(result => {
+            if (!result?.success) return;
+            libraryTracks.forEach(item => { if (item.path === track.path) item.playCount = result.playCount; });
+            renderSidebarShortcuts();
+        }).catch(error => {
+            console.error('Failed to save track play count:', error);
+        });
+    }
+});
 
-
-function formatTime(seconds) {
-    if (!isFinite(seconds) || seconds < 0) seconds = 0;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
 
 mainPlayer.addEventListener('loadedmetadata', () => {
     if (seekSlider) {
@@ -869,6 +931,7 @@ function saveAndAttachTrack(filePath, fileName, data, imageUrl) {
                 delete trackObj.imageUrl;
             }
             libraryTracks.push(trackObj);
+            renderSidebarShortcuts();
             currentPlaylist.tracks.push({ ...trackObj });
             renderDetail();
             return window.electronAPI.addTrackToPlaylist(currentPlaylist.id, trackObj);
