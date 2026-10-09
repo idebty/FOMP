@@ -10,29 +10,94 @@
 <body>
 
 <div class="sidebar">
+    <div class="sidebar_search">
+        <input type="text" id="sidebar-search" placeholder="Search title, artist, album, year..." autocomplete="off">
+    </div>
     <div class="sidebar_main">
-    <button class="sidebar_main_btn" id="home" data-nav="home">
-        <img src="../images/home.png" alt="Home" class="btn_icon">
-        <span>Home</span></button>
-    <button class="sidebar_main_btn" data-nav="playlists">
-        <img src="../images/playlist.png" alt="playlist" class="btn_icon" >
-        <span>Playlists</span></button>
-
+        <button class="sidebar_main_btn" id="home" data-nav="home">
+            <img src="../images/home.png" alt="Home" class="btn_icon">
+            <span>Home</span>
+        </button>
+        <button class="sidebar_main_btn" id="playlists" data-nav="playlists">
+            <img src="../images/playlist.png" alt="Playlists" class="btn_icon">
+            <span>Playlists</span>
+        </button>
+        <button class="sidebar_main_btn" id="lyrics-nav-btn" type="button" data-open-lyrics>
+            <img src="../images/music.png" alt="" class="btn_icon">
+            <span>Lyrics</span>
+        </button>
+    </div>
+    <div class="sidebar_albums">
+        <div class="sidebar_section_title">Top songs</div>
+        <div class="sidebar_album_list" id="top-songs-list"></div>
+        <div class="sidebar_section_title">Top playlists</div>
+        <div class="sidebar_album_list" id="top-playlists-list"></div>
     </div>
     <div class="sidebar_footer">
-    <button class="sidebar_btn" data-nav="settings">
-        <img src="../images/settings.png" alt="songs" class="btn_icon">
-        <span>Settings</span></button>
-
+        <button class="sidebar_btn" id="settings" data-nav="settings">
+            <img src="../images/settings.png" alt="Settings" class="btn_icon">
+            <span>Settings</span>
+        </button>
     </div>
 </div>
 
-<div class="body_main">
-<p class="credit_text">Electron <a href="https://github.com/electron/electron/blob/main/LICENSE">License</a></p> 
-<p class="credit_text">Fancy offline Music Player Developed by idebty<a href="https://github.com/idebty/FOMP/">view</a></p> 
+<main class="body_main credits-page">
+  <div class="credits-container">
+    <header class="credits-header">
+      <span class="credits-eyebrow">About this app</span>
+      <h1>Credits &amp; Licenses</h1>
+      <p>Thanks to the people and projects that make this music player possible.</p>
+    </header>
 
-</div>
-</body>
+    <section class="credits-section" aria-labelledby="app-credit-title">
+      <h2 id="app-credit-title">Application</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>Fancy Offline Music Player</h3>
+          <p>Developed by idebty</p>
+        </div>
+        <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU GPL 3.0</a>
+      </div>
+    </section>
+
+    <section class="credits-section" aria-labelledby="software-credit-title">
+      <h2 id="software-credit-title">Open-source software</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>Electron</h3>
+          <p>Desktop application framework</p>
+        </div>
+        <a href="https://github.com/electron/electron/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+      </div>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>electron-builder</h3>
+          <p>Application packaging and distribution</p>
+        </div>
+        <a href="https://github.com/electron-userland/electron-builder/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+      </div>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>jsmediatags</h3>
+          <p>Audio metadata and embedded artwork reading</p>
+        </div>
+        <a href="https://github.com/aadsm/jsmediatags/blob/master/LICENSE.md" target="_blank" rel="noopener noreferrer">BSD 3-Clause License</a>
+      </div>
+    </section>
+
+    <section class="credits-section" aria-labelledby="service-credit-title">
+      <h2 id="service-credit-title">Online services</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>LRCLIB</h3>
+          <p>Online lyrics search and timed lyrics</p>
+        </div>
+        <a href="https://lrclib.net/" target="_blank" rel="noopener noreferrer">LRCLIB website</a>
+      </div>
+    </section>
+  </div>
+</main>
 <script src="../javascript/persistant.js" defer></script>
+</body>
 
 </html>
