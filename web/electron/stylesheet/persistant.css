@@ -92,6 +92,7 @@ body.mini-player-mode .play-btn-circle img { width: 17px; height: 17px; }
 
 /* Fullscreen listening view opened by double-clicking a track. */
 .fullscreen-exit-btn { display: none; }
+.fullscreen-cover-bg { display: none; }
 body.fullscreen-player-mode { overflow: hidden; background: #09090b; }
 body.fullscreen-player-mode .sidebar { display: none !important; }
 body.fullscreen-player-mode .body_main {
@@ -109,21 +110,29 @@ body.fullscreen-player-mode .lyrics-view {
   padding: 48px 8vw 24px; box-sizing: border-box; overflow: hidden;
   background: radial-gradient(ellipse at 24% 28%, #27272a 0%, #111113 42%, #09090b 100%);
 }
+body.fullscreen-player-mode .fullscreen-cover-bg {
+  display: block; position: absolute; inset: -28px; z-index: 0; width: calc(100% + 56px); height: calc(100% + 56px);
+  object-fit: cover; filter: blur(28px) brightness(.28) saturate(.78); pointer-events: none;
+}
+body.fullscreen-player-mode .lyrics-view::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, rgba(9,9,11,.48), rgba(9,9,11,.72) 48%, rgba(9,9,11,.62));
+}
 body.fullscreen-player-mode .lyrics-heading {
-  grid-column: 1; grid-row: 1; display: flex; flex-direction: column;
+  position: relative; z-index: 2; grid-column: 1; grid-row: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 20px; padding: 0;
   border: 0; text-align: center;
 }
 body.fullscreen-player-mode #lyrics-cover {
-  width: min(32vw, 42vh, 380px); height: min(32vw, 42vh, 380px);
+  display: block; width: min(32vw, 42vh, 380px); height: min(32vw, 42vh, 380px);
   flex: 0 0 auto; border-radius: 10px;
 }
-body.fullscreen-player-mode .lyrics-track-info { width: 100%; }
+body.fullscreen-player-mode .lyrics-track-info { width: 100%; max-width: 620px; }
 body.fullscreen-player-mode .lyrics-track-info h2 { font-size: clamp(1.6rem, 3vw, 2.7rem); }
 body.fullscreen-player-mode .lyrics-search-wrap,
 body.fullscreen-player-mode .lyrics-actions { display: none !important; }
 body.fullscreen-player-mode .lyrics-lines {
-  grid-column: 2; grid-row: 1; width: 100%; max-width: 900px; height: 100%;
+  position: relative; z-index: 2; grid-column: 2; grid-row: 1; width: 100%; max-width: 900px; height: 100%;
   align-self: stretch; padding: 7vh 20px; overflow-y: auto; box-sizing: border-box;
 }
 body.fullscreen-player-mode .lyric-line { padding: 12px 10px; font-size: clamp(1.1rem, 2vw, 1.8rem); }
@@ -132,6 +141,7 @@ body.fullscreen-player-mode .fullscreen-exit-btn {
   padding: 8px 12px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px;
   color: #fff; background: rgba(24,24,27,.72); cursor: pointer;
 }
+body.fullscreen-player-mode .fullscreen-cover-bg + .fullscreen-exit-btn { z-index: 30; }
 body.fullscreen-player-mode .player-bar {
   position: fixed !important; left: 0; right: 0; bottom: 0; width: 100%; height: 124px;
   z-index: 20; display: grid; grid-template-rows: 18px minmax(0, 1fr); gap: 8px;
@@ -158,7 +168,7 @@ body.fullscreen-player-mode .volume-container { margin-right: 16px; }
     grid-column: 1; grid-row: 1; flex-direction: row; justify-content: flex-start;
     gap: 18px; text-align: left;
   }
-  body.fullscreen-player-mode #lyrics-cover { width: min(20vw, 160px); height: min(20vw, 160px); }
+  body.fullscreen-player-mode #lyrics-cover { display: block; width: min(20vw, 160px); height: min(20vw, 160px); }
   body.fullscreen-player-mode .lyrics-lines { grid-column: 1; grid-row: 2; padding: 12px 8px 30px; }
 }
 
