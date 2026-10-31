@@ -1,3 +1,144 @@
+let appPageOverlay = null;
+let appPageStyles = [];
+let appPageScript = null;
+
+function closeAppPageOverlay() {
+    if (!appPageOverlay) return;
+    window.cleanupSettingsPage?.();
+    appPageOverlay.remove();
+    appPageOverlay = null;
+    appPageScript?.remove();
+    appPageScript = null;
+    appPageStyles.forEach(link => link.remove());
+    appPageStyles = [];
+}
+
+async function showAppPageOverlay(page) {
+    if (!['settings', 'credits'].includes(page)) return false;
+    if (appPageOverlay?.dataset.page === page) return true;
+    if (appPageOverlay) closeAppPageOverlay();
+    const pageUrl = new URL(`../html/${page}.html`, window.location.href);
+    const html = await window.electronAPI?.getAppPage?.(page);
+    if (!html) return false;
+    const parsedPage = new DOMParser().parseFromString(html, 'text/html');
+    const overlay = document.createElement('section');
+    overlay.className = 'in-app-page-overlay';
+    overlay.dataset.page = page;
+    overlay.setAttribute('aria-label', page === 'settings' ? 'Settings' : 'Credits');
+
+    parsedPage.querySelectorAll('link[rel="stylesheet"][href]').forEach(source => {
+        const href = new URL(source.getAttribute('href'), pageUrl).href;
+        if (Array.from(document.querySelectorAll('link[rel="stylesheet"]')).some(link => link.href === href)) return;
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        document.head.appendChild(link);
+        appPageStyles.push(link);
+    });
+    Array.from(parsedPage.body.children).forEach(child => {
+        if (child.tagName !== 'SCRIPT') overlay.appendChild(document.importNode(child, true));
+    });
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'in-app-page-close';
+    closeButton.textContent = 'Back to player';
+    closeButton.addEventListener('click', closeAppPageOverlay);
+    overlay.appendChild(closeButton);
+
+    overlay.addEventListener('click', event => {
+        const nav = event.target.closest('[data-nav]');
+        if (nav) {
+            event.preventDefault();
+            window.navigateApp(`../html/${nav.dataset.nav}.html`);
+            return;
+        }
+        const lyricsNav = event.target.closest('[data-open-lyrics]');
+        if (lyricsNav) {
+            event.preventDefault();
+            window.navigateApp('../html/home.html?view=lyrics');
+            return;
+        }
+        const link = event.target.closest('a[href]');
+        if (link) {
+            const destination = new URL(link.href, pageUrl);
+            if (destination.origin === pageUrl.origin && /\/(settings|credits)\.html$/i.test(destination.pathname)) {
+                event.preventDefault();
+                window.navigateApp(destination.href);
+            }
+        }
+    });
+
+    document.body.prepend(overlay);
+    appPageOverlay = overlay;
+    if (page === 'settings') {
+        appPageScript = document.createElement('script');
+        appPageScript.src = new URL('../javascript/settings.js', pageUrl).href;
+        appPageScript.onerror = () => console.error('Could not load Settings controls.');
+        document.body.appendChild(appPageScript);
+    }
+    return true;
+}
+
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && appPageOverlay) closeAppPageOverlay();
+});
+
+// Keep recently visited app pages in Chromium's back/forward cache. Returning
+// to a page through the app navigation then restores its live DOM and state.
+(() => {
+    const routesKey = 'music-app-navigation-routes';
+    const pendingKey = 'music-app-navigation-pending';
+    const currentUrl = window.location.href;
+    let routes = [];
+    let index = Number.isInteger(window.history.state?.musicAppIndex) ? window.history.state.musicAppIndex : -1;
+
+    try {
+        routes = JSON.parse(sessionStorage.getItem(routesKey) || '[]');
+        if (index < 0) {
+            const pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null');
+            if (pending?.url === currentUrl && Number.isInteger(pending.index)) {
+                index = pending.index;
+                sessionStorage.removeItem(pendingKey);
+            } else {
+                index = routes.length;
+            }
+            history.replaceState({ ...history.state, musicAppIndex: index }, '');
+        }
+        routes[index] = currentUrl;
+        sessionStorage.setItem(routesKey, JSON.stringify(routes));
+    } catch (error) {
+        console.warn('App page state could not be saved:', error);
+    }
+
+    window.navigateApp = async path => {
+        const destination = new URL(path, currentUrl).href;
+        const destinationPage = new URL(destination).pathname.split('/').pop().replace(/\.html$/i, '');
+        if (['settings', 'credits'].includes(destinationPage)) {
+            await showAppPageOverlay(destinationPage);
+            return;
+        }
+        if (appPageOverlay) closeAppPageOverlay();
+        try {
+            const savedRoutes = JSON.parse(sessionStorage.getItem(routesKey) || '[]');
+            const currentIndex = Number.isInteger(history.state?.musicAppIndex) ? history.state.musicAppIndex : index;
+            const existingIndex = savedRoutes.findIndex((route, routeIndex) => routeIndex !== currentIndex && route === destination);
+            if (existingIndex >= 0) {
+                history.go(existingIndex - currentIndex);
+                return;
+            }
+            const nextIndex = currentIndex + 1;
+            savedRoutes.length = nextIndex;
+            savedRoutes[nextIndex] = destination;
+            sessionStorage.setItem(routesKey, JSON.stringify(savedRoutes));
+            sessionStorage.setItem(pendingKey, JSON.stringify({ url: destination, index: nextIndex }));
+        } catch (error) {
+            console.warn('App navigation state could not be saved:', error);
+        }
+        window.location.assign(destination);
+    };
+})();
+
 window.musicCommon = (() => {
     const DEFAULT_COVER = '../images/music.png';
     const SUPPORTED_EXTENSIONS = /\.(mp3|wav)$/i;
@@ -122,14 +263,14 @@ if (sidebarSearchInput) {
             window.applyLibrarySearch(sidebarSearchInput.value);
         } else if (sidebarSearchInput.value.trim()) {
             navigationTimer = setTimeout(() => {
-                window.location.replace(`../html/home.html?search=${encodeURIComponent(sidebarSearchInput.value.trim())}`);
+                window.navigateApp(`../html/home.html?search=${encodeURIComponent(sidebarSearchInput.value.trim())}`);
             }, 350);
         }
     });
     sidebarSearchInput.addEventListener('keydown', event => {
         if (event.key !== 'Enter' || typeof window.applyLibrarySearch === 'function') return;
         const query = sidebarSearchInput.value.trim();
-        if (query) window.location.replace(`../html/home.html?search=${encodeURIComponent(query)}`);
+        if (query) window.navigateApp(`../html/home.html?search=${encodeURIComponent(query)}`);
     });
 }
 
@@ -137,13 +278,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-nav]').forEach(button => {
     button.addEventListener('click', () => {
       const targetPage = button.dataset.nav;
-      window.location.replace(`../html/${targetPage}.html`);
+      window.navigateApp(`../html/${targetPage}.html`);
     });
   });
 
   document.querySelectorAll('[data-open-lyrics]').forEach(button => {
     button.addEventListener('click', () => {
-      window.location.replace('../html/home.html?view=lyrics');
+      window.navigateApp('../html/home.html?view=lyrics');
     });
   });
 
@@ -160,10 +301,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const songList = document.getElementById('top-songs-list');
       const playlistList = document.getElementById('top-playlists-list');
       if (songList) window.musicCommon.renderMostPlayedSongs(tracks || [], track => {
-        window.location.replace(`../html/home.html?play=${encodeURIComponent(track.path)}`);
+        window.navigateApp(`../html/home.html?play=${encodeURIComponent(track.path)}`);
       });
       if (playlistList) window.musicCommon.renderMostPlayedPlaylists(tracks || [], playlists || [], playlist => {
-        window.location.replace(`../html/home.html?playlist=${encodeURIComponent(playlist.id)}`);
+        window.navigateApp(`../html/home.html?playlist=${encodeURIComponent(playlist.id)}`);
       });
     }).catch(error => console.error('Could not load most played shortcuts:', error));
   }
