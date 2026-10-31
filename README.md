@@ -19,6 +19,7 @@ Whether you want to manage your music library, curate playlists, or keep everyth
 ## Why use it?
 
 Fancy Offline Music Player is ideal for users who want:
+- A Ad free, Private player
 - A local-first music experience
 - A clean desktop interface
 - Easy library organization
