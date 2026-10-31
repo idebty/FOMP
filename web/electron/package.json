@@ -8,8 +8,8 @@
     "build": "electron-builder --win --x64"
   },
   "keywords": [],
-  "author": "Your Name",
-  "license": "ISC",
+  "author": "idebty",
+  "license": "GPL_3",
   "type": "commonjs",
   "devDependencies": {
     "electron": "^43.4.0",
