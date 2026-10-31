@@ -127,6 +127,63 @@
   </div>
 
   <div class="settings-section">
+    <div class="settings-section-title">Discord Rich Presence</div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Show what is playing in Discord</span>
+        <span class="desc">Connects to the Discord desktop app and shows the current song. Create a Discord application and paste its Application ID below.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="discord-presence-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <label class="discord-setting-field"><span>Discord Application ID</span><input id="discord-client-id" type="text" inputmode="numeric" autocomplete="off" placeholder="Application ID"></label>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Show song artwork</span>
+        <span class="desc">Publishes a centered 1:1 PNG to your public GitHub repository so Discord can display it. A GitHub token with Contents write access is required.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="discord-art-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <label class="discord-setting-field"><span>GitHub username or organization</span><input id="github-owner" type="text" autocomplete="off" placeholder="owner"></label>
+    <label class="discord-setting-field"><span>Public repository name</span><input id="github-repository" type="text" autocomplete="off" placeholder="song-art"></label>
+    <label class="discord-setting-field"><span>Repository branch</span><input id="github-branch" type="text" autocomplete="off" placeholder="main"></label>
+    <label class="discord-setting-field"><span>GitHub personal access token</span><input id="github-token" type="password" autocomplete="new-password" placeholder="Stored encrypted on this device"></label>
+    <div class="discord-settings-actions">
+      <button class="btn" id="save-discord-settings-btn" type="button">Save Discord Settings</button>
+      <span id="discord-settings-status" role="status">Discord is disconnected.</span>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Background Hotkeys</div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Enable Background Hotkeys</span>
+        <span class="desc">When enabled, these controls work while the player is minimized or another app is focused. Toggle them anytime with Ctrl+Alt+F2.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="background-hotkeys-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <p class="hotkey-status" id="background-hotkey-status" role="status">Checking shortcut registration…</p>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Toggle Background Hotkeys</span></div><span class="hotkey-fixed">Ctrl + Alt + F2</span></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Fullscreen</span></div><button class="btn hotkey-capture" data-hotkey-name="fullscreen">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Play / Pause</span></div><button class="btn hotkey-capture" data-hotkey-name="playback">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Previous Track</span></div><button class="btn hotkey-capture" data-hotkey-name="previous">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Next Track</span></div><button class="btn hotkey-capture" data-hotkey-name="next">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Seek Back 5 Seconds</span></div><button class="btn hotkey-capture" data-hotkey-name="seekBack">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Seek Forward 5 Seconds</span></div><button class="btn hotkey-capture" data-hotkey-name="seekForward">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Volume Up</span></div><button class="btn hotkey-capture" data-hotkey-name="volumeUp">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Volume Down</span></div><button class="btn hotkey-capture" data-hotkey-name="volumeDown">Set Shortcut</button></div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-section-title">Equalizer</div>
 
     <div class="settings-row">
@@ -191,7 +248,7 @@
     <div class="settings-row">
       <div class="settings-label">
         <span class="title">Export Backup</span>
-        <span class="desc">Save your library and playlists to a JSON file.</span>
+        <span class="desc">Save songs, playlists, settings, lyrics, and artwork in a portable .flib archive.</span>
       </div>
       <button class="btn btn-primary" id="export-data-btn">Export</button>
     </div>
@@ -199,7 +256,7 @@
     <div class="settings-row">
       <div class="settings-label">
         <span class="title">Import Backup</span>
-        <span class="desc">Restore your library and playlists from a JSON backup. This overwrites your current library.</span>
+        <span class="desc">Restore a .flib archive, including songs. You’ll choose where to store the imported music; your current library will be replaced.</span>
       </div>
       <button class="btn" id="import-data-btn">Import</button>
     </div>
