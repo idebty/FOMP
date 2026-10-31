@@ -33,6 +33,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (partial) => ipcRenderer.invoke('save-settings', partial),
+  saveDiscordGithubToken: (token) => ipcRenderer.invoke('save-discord-github-token', token),
+  updateDiscordPresence: (activity) => ipcRenderer.invoke('update-discord-presence', activity),
+  getDiscordPresenceStatus: () => ipcRenderer.invoke('get-discord-presence-status'),
+  notifyNextTrack: (track) => ipcRenderer.invoke('notify-next-track', track),
+  getAppPage: (page) => ipcRenderer.invoke('get-app-page', page),
+  reorderTracks: (paths) => ipcRenderer.invoke('reorder-tracks', paths),
+  reorderPlaylistTracks: (playlistId, paths) => ipcRenderer.invoke('reorder-playlist-tracks', { playlistId, paths }),
+  setHotkeyCaptureMode: (capturing) => ipcRenderer.invoke('set-hotkey-capture-mode', Boolean(capturing)),
+  onBackgroundHotkeyStatus: (callback) => ipcRenderer.on('background-hotkey-status', (_event, status) => callback(status)),
   chooseWatchFolder: () => ipcRenderer.invoke('choose-watch-folder'),
   clearWatchFolder: () => ipcRenderer.invoke('clear-watch-folder'),
   exportData: () => ipcRenderer.invoke('export-data'),
@@ -42,5 +51,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setMiniPlayerMode: (enabled) => ipcRenderer.invoke('set-mini-player-mode', Boolean(enabled)),
   setFullscreenPlayer: (enabled) => ipcRenderer.invoke('set-fullscreen-player', Boolean(enabled)),
   onFullscreenPlayerState: (callback) => ipcRenderer.on('fullscreen-player-state', (_event, enabled) => callback(enabled)),
-  onLibraryUpdated: (callback) => ipcRenderer.on('library-updated', callback)
+  onGlobalPlayerHotkey: (callback) => ipcRenderer.on('global-player-hotkey', (_event, action) => callback(action)),
+  onLibraryUpdated: (callback) => {
+    const listener = (_event, ...args) => callback(...args);
+    ipcRenderer.on('library-updated', listener);
+    return () => ipcRenderer.removeListener('library-updated', listener);
+  }
 });
