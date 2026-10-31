@@ -146,6 +146,18 @@
         updateActiveLine(true);
     }
 
+    function applyLyricsArtist(track, result) {
+        const artist = String(result?.artistName || '').trim();
+        if (!artist || !track?.path || artist === String(track.data?.artist || '').trim()) return;
+        track.data = track.data || {};
+        track.data.artist = artist;
+        lyricsArtist.textContent = artist;
+        window.applyLibrarySearch?.(document.getElementById('sidebar-search')?.value || '');
+        window.electronAPI?.updateTrack?.(track.path, { artist }).catch(error => {
+            console.error('Could not save artist metadata from lyrics:', error);
+        });
+    }
+
     function isCurrentRequest(id, track) {
         return id === requestId && getCurrentTrack()?.path === track.path;
     }
@@ -190,7 +202,8 @@
             }
 
             if (resultCache.has(track.path)) {
-                renderLyrics(track, resultCache.get(track.path));
+                const cachedResult = resultCache.get(track.path);
+                renderLyrics(track, cachedResult);
                 return;
             }
             if (!window.electronAPI?.findLyrics) {
@@ -325,6 +338,12 @@
                 albumName: selectedSuggestion?.albumName || track.data?.album || ''
             });
             if (!isCurrentRequest(id, track)) return;
+            if (result?.status === 'found') {
+                applyLyricsArtist(track, {
+                    ...result,
+                    artistName: result.artistName || selectedSuggestion?.artistName
+                });
+            }
             const cachedLyrics = {
                 source: 'cached',
                 plainLyrics: result?.plainLyrics || '',
