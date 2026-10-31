@@ -4,6 +4,27 @@ body {
     z-index: 0;
 }
 
+.in-app-page-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow: auto;
+  background: rgb(8, 8, 9);
+}
+
+.in-app-page-close {
+  position: fixed;
+  z-index: 2002;
+  top: 10px;
+  right: 12px;
+  padding: 8px 12px;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(24, 24, 27, .92);
+  cursor: pointer;
+}
+
 button {
   margin: 0;
   border: 0;
