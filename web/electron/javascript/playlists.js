@@ -10,6 +10,8 @@ let lastVolume = 1;
 let isShuffle = false;
 let isRepeatAll = false;
 let isRepeatOne = false;
+let playlistDragTrackPath = null;
+let suppressPlaylistClickUntil = 0;
 
 const gridView = document.getElementById('grid-view');
 const detailView = document.getElementById('detail-view');
@@ -54,9 +56,11 @@ function syncMiniTrackInfo(track) {
     const title = document.getElementById('mini-track-title');
     const artist = document.getElementById('mini-track-artist');
     const cover = document.getElementById('mini-track-cover');
+    const fullscreenCover = document.getElementById('fullscreen-cover-bg');
     if (title) title.textContent = track ? (track.data?.title || stripExtension(track.name) || 'Unknown Title') : 'Nothing playing';
     if (artist) artist.textContent = track?.data?.artist || '';
     if (cover) cover.src = artworkSource(track);
+    if (fullscreenCover) fullscreenCover.src = artworkSource(track);
 }
 
 miniPlayerToggle?.addEventListener('click', async () => {
@@ -89,6 +93,11 @@ document.addEventListener('keydown', async event => {
     if (!currentPlaylist?.tracks[plCurrentTrackIndex]) return;
 
     event.preventDefault();
+    await toggleFullscreenHotkey();
+});
+
+async function toggleFullscreenHotkey() {
+    if (!currentPlaylist?.tracks[plCurrentTrackIndex]) return;
     if (document.body.classList.contains('fullscreen-player-mode')) {
         await window.electronAPI?.setFullscreenPlayer(false);
         return;
@@ -100,7 +109,7 @@ document.addEventListener('keydown', async event => {
         if (restored === false) document.body.classList.remove('mini-player-mode');
     }
     await window.electronAPI?.setFullscreenPlayer(true);
-});
+}
 const playBtn = document.getElementById('play-btn');
 const playIcon = document.getElementById('play-icon');
 const prevBtn = document.getElementById('prev-btn');
@@ -108,12 +117,12 @@ const nextBtn = document.getElementById('next-btn');
 
 function renderSidebarShortcuts() {
     window.musicCommon.renderMostPlayedSongs(libraryTracks, track => {
-        window.location.replace(`../html/home.html?play=${encodeURIComponent(track.path)}`);
+        window.navigateApp(`../html/home.html?play=${encodeURIComponent(track.path)}`);
     });
     if (window.electronAPI?.getPlaylists) {
         window.electronAPI.getPlaylists().then(saved => {
             window.musicCommon.renderMostPlayedPlaylists(libraryTracks, saved || [], playlist => {
-                window.location.replace(`../html/home.html?playlist=${encodeURIComponent(playlist.id)}`);
+                window.navigateApp(`../html/home.html?playlist=${encodeURIComponent(playlist.id)}`);
             });
         }).catch(error => console.error('Could not load most played playlists:', error));
     }
@@ -216,7 +225,7 @@ function renderPlaylistGrid() {
         card.className = 'pl-card';
         card.innerHTML = `
             <div class="pl-card-cover-wrapper">
-                <img src="${playlistCover(playlist)}" alt="${escapeHtml(playlist.name)}">
+                <img src="${playlistCover(playlist)}" alt="${escapeHtml(playlist.name)}" loading="lazy" decoding="async">
             </div>
             <div class="pl-card-name">${escapeHtml(playlist.name)}</div>
             <div class="pl-card-count">${playlist.tracks.length} song${playlist.tracks.length === 1 ? '' : 's'}</div>
@@ -318,17 +327,35 @@ function renderDetail(query = '') {
     });
 }
 
+function reorderPlaylistTrack(sourcePath, targetPath) {
+    if (!currentPlaylist || !sourcePath || !targetPath || sourcePath === targetPath) return;
+    const sourceIndex = currentPlaylist.tracks.findIndex(track => track.path === sourcePath);
+    const targetIndex = currentPlaylist.tracks.findIndex(track => track.path === targetPath);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const playingPath = currentPlaylist.tracks[plCurrentTrackIndex]?.path;
+    const [track] = currentPlaylist.tracks.splice(sourceIndex, 1);
+    currentPlaylist.tracks.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, track);
+    plCurrentTrackIndex = playingPath ? currentPlaylist.tracks.findIndex(item => item.path === playingPath) : -1;
+    renderDetail(document.getElementById('sidebar-search')?.value || '');
+    updateNowPlayingHighlight();
+    window.electronAPI?.reorderPlaylistTracks(currentPlaylist.id, currentPlaylist.tracks.map(item => item.path))
+        .then(result => { if (!result?.success) console.error('Could not save playlist order:', result?.error); })
+        .catch(error => console.error('Could not save playlist order:', error));
+}
+
 window.applyLibrarySearch = (query) => renderDetail(query);
 
 function createPlaylistTrackElement(track, index) {
     const trackItem = document.createElement('div');
     trackItem.className = 'track-item' + (index === plCurrentTrackIndex ? ' now-playing' : '');
+    trackItem.draggable = true;
+    trackItem.dataset.trackPath = track.path;
 
     trackItem.innerHTML = `
         <div class="track-index">${index + 1}</div>
         <div class="track-info-col">
             <div class="track-cover-wrapper">
-                <img class="track-cover-img" src="${artworkSource(track)}">
+                <img class="track-cover-img" src="${artworkSource(track)}" loading="lazy" decoding="async">
             </div>
             <div class="track-text">
                 <span class="track-title">${escapeHtml(track.data?.title || stripExtension(track.name))}</span>
@@ -340,6 +367,7 @@ function createPlaylistTrackElement(track, index) {
     `;
 
     trackItem.addEventListener('click', event => {
+        if (Date.now() < suppressPlaylistClickUntil) { event.preventDefault(); return; }
         if (event.detail > 1) return;
         loadPlTrack(index);
     });
@@ -347,6 +375,35 @@ function createPlaylistTrackElement(track, index) {
         if (event.target.closest('button, input, [contenteditable="true"]')) return;
         if (plCurrentTrackIndex !== index) loadPlTrack(index);
         enterFullscreenPlayer();
+    });
+    trackItem.addEventListener('dragstart', event => {
+        if (event.target.closest('button, input, [contenteditable="true"], .track-cover-wrapper')) {
+            event.preventDefault();
+            return;
+        }
+        playlistDragTrackPath = track.path;
+        suppressPlaylistClickUntil = Date.now() + 600;
+        trackItem.classList.add('is-dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', track.path);
+    });
+    trackItem.addEventListener('dragover', event => {
+        if (!playlistDragTrackPath) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        trackItem.classList.add('is-drop-target');
+    });
+    trackItem.addEventListener('dragleave', () => trackItem.classList.remove('is-drop-target'));
+    trackItem.addEventListener('drop', event => {
+        event.preventDefault();
+        trackItem.classList.remove('is-drop-target');
+        const sourcePath = event.dataTransfer.getData('text/plain') || playlistDragTrackPath;
+        reorderPlaylistTrack(sourcePath, track.path);
+    });
+    trackItem.addEventListener('dragend', () => {
+        playlistDragTrackPath = null;
+        trackItem.classList.remove('is-dragging');
+        document.querySelectorAll('.track-item.is-drop-target').forEach(element => element.classList.remove('is-drop-target'));
     });
 
     const removeBtn = trackItem.querySelector('.remove-track-btn');
@@ -488,7 +545,7 @@ playBtn.addEventListener('click', () => {
 
 mainPlayer.addEventListener('play', () => { playIcon.src = '../images/pause.png'; });
 mainPlayer.addEventListener('pause', () => { playIcon.src = '../images/play.png'; });
-window.addEventListener('beforeunload', () => {
+window.addEventListener('pagehide', () => {
     const track = currentPlaylist?.tracks[plCurrentTrackIndex];
     if (!track?.path) return;
     const navigationState = {
@@ -501,6 +558,10 @@ window.addEventListener('beforeunload', () => {
     window.electronAPI?.saveSettings?.({
         lastSession: { ...navigationState, wasPlaying: navigationState.isPlaying }
     }).catch(() => {});
+});
+window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    try { sessionStorage.removeItem('wuom-playback-snapshot'); } catch (_) {}
 });
 mainPlayer.addEventListener('playing', () => {
     if (!currentPlaylist || plCurrentTrackIndex < 0 || plCountedPlaybackGeneration === plPlaybackGeneration) return;
@@ -711,8 +772,40 @@ function changeVolumeHotkey(delta) {
     }
 }
 
+function isConfiguredBackgroundHotkey(event) {
+    if (!appSettings.backgroundHotkeysEnabled) return false;
+    let key = event.code === 'Space' ? 'Space' : event.key;
+    if (/^Key[A-Z]$/.test(event.code)) key = event.code.slice(3);
+    else if (/^Digit[0-9]$/.test(event.code)) key = event.code.slice(5);
+    else if (key.startsWith('Arrow')) key = key.slice(5);
+    else if (key === ' ') key = 'Space';
+    else if (key === 'Enter') key = 'Return';
+    const actualKey = String(key).toLowerCase();
+    const actualModifiers = [];
+    if (event.ctrlKey) actualModifiers.push('control');
+    if (event.altKey) actualModifiers.push('alt');
+    if (event.shiftKey) actualModifiers.push('shift');
+    if (event.metaKey) actualModifiers.push('super');
+
+    return Object.values(appSettings.backgroundHotkeys || {}).some(accelerator => {
+        const parts = accelerator.split('+');
+        const configuredKey = parts.pop().toLowerCase();
+        const configuredModifiers = parts.map(modifier => {
+            const normalized = modifier.toLowerCase();
+            if (normalized === 'commandorcontrol') {
+                return navigator.platform.toLowerCase().includes('mac') ? 'super' : 'control';
+            }
+            return normalized === 'meta' ? 'super' : normalized;
+        }).sort();
+        return configuredKey === actualKey &&
+            configuredModifiers.join('+') === actualModifiers.sort().join('+');
+    });
+}
+
 document.addEventListener('keydown', (event) => {
     if (isEditableHotkeyTarget(event.target)) return;
+    if (isConfiguredBackgroundHotkey(event)) return;
+    if (event.ctrlKey && event.altKey) return;
 
     if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
@@ -756,6 +849,22 @@ document.addEventListener('keydown', (event) => {
         });
     }
 }, true);
+
+window.electronAPI?.onGlobalPlayerHotkey(action => {
+    switch (action) {
+        case 'toggle-fullscreen': toggleFullscreenHotkey(); break;
+        case 'toggle-playback': togglePlaybackHotkey(); break;
+        case 'previous-track': plPlayPrev(); break;
+        case 'next-track': plPlayNext(); break;
+        case 'seek-back': seekHotkey(-5); break;
+        case 'seek-forward': seekHotkey(5); break;
+        case 'volume-up': changeVolumeHotkey(1); break;
+        case 'volume-down': changeVolumeHotkey(-1); break;
+    }
+});
+window.electronAPI?.onBackgroundHotkeyStatus(status => {
+    appSettings.backgroundHotkeysEnabled = status.enabled === true;
+});
 
 document.addEventListener('keyup', (event) => {
     if (
@@ -818,7 +927,7 @@ function renderAddSongList() {
         const row = document.createElement('div');
         row.className = 'pl-library-row';
         row.innerHTML = `
-            <img src="${artworkSource(track)}">
+            <img src="${artworkSource(track)}" loading="lazy" decoding="async">
             <div class="pl-library-row-text">
                 <span class="title">${escapeHtml(track.data?.title || stripExtension(track.name))}</span>
                 <span class="artist">${escapeHtml(track.data?.artist || 'Unknown Artist')}</span>
@@ -884,37 +993,17 @@ detailUploadInput.addEventListener('change', (event) => {
             return;
         }
 
-        jsmediatags.read(file, {
-            onSuccess: function (tag) {
-                const data = tag.tags;
-                let imageUrl = '';
-
-                if (data.picture) {
-                    const { data: pictureData, format } = data.picture;
-                    const mimeType = imageMimeType(format, pictureData);
-                    let base64String = '';
-                    for (let i = 0; i < pictureData.length; i++) {
-                        base64String += String.fromCharCode(pictureData[i]);
-                    }
-                    if (mimeType) imageUrl = `data:${mimeType};base64,${window.btoa(base64String)}`;
-                }
-
-                const cleanData = {
-                    title: data.title,
-                    artist: data.artist,
-                    album: data.album
-                };
-
-                saveAndAttachTrack(filePath, file.name, cleanData, imageUrl);
-            },
-            onError: function () {
-                saveAndAttachTrack(filePath, file.name, {}, '');
-            }
-        });
+        window.electronAPI.readMetadata(filePath)
+            .then(metadata => saveAndAttachTrack(filePath, file.name, {
+                title: metadata.title,
+                artist: metadata.artist,
+                album: metadata.album
+            }, metadata.imagePath || ''))
+            .catch(() => saveAndAttachTrack(filePath, file.name, {}, ''));
     });
 });
 
-function saveAndAttachTrack(filePath, fileName, data, imageUrl) {
+function saveAndAttachTrack(filePath, fileName, data, imageSource) {
     if (!currentPlaylist || !window.electronAPI) return;
     if (libraryTracks.find(t => t.path === filePath)) {
         const existing = libraryTracks.find(t => t.path === filePath);
@@ -922,7 +1011,11 @@ function saveAndAttachTrack(filePath, fileName, data, imageUrl) {
         return;
     }
 
-    const trackObj = { path: filePath, name: fileName, data, imageUrl: imageUrl || '' };
+    const trackObj = { path: filePath, name: fileName, data };
+    if (imageSource) {
+        if (imageSource.startsWith('artwork/')) trackObj.imagePath = imageSource;
+        else trackObj.imageUrl = imageSource;
+    }
 
     window.electronAPI.saveTrack(trackObj)
         .then(result => {
@@ -968,6 +1061,11 @@ function applyEqSettings() {
 
 let audioCtx = null;
 let bassFilter, midFilter, trebleFilter, compressor, gainNode, sourceNode;
+
+function hasActiveAudioProcessing() {
+    return Boolean(normalizeToggle?.checked) ||
+        [eqBass, eqMid, eqTreble].some(slider => Math.abs(Number(slider?.value) || 0) > 0.001);
+}
 
 function setupAudioGraph() {
     if (audioCtx) return;
@@ -1024,11 +1122,11 @@ function setNormalization(enabled) {
 mainPlayer.crossOrigin = 'anonymous';
 
 mainPlayer.addEventListener('play', () => {
-    if (!audioCtx) {
+    if (!audioCtx && hasActiveAudioProcessing()) {
         setupAudioGraph();
         setNormalization(normalizeToggle ? normalizeToggle.checked : false);
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
 });
 
 if (eqToggleBtn && eqPanel) {
@@ -1053,13 +1151,21 @@ function saveEqSettings() {
     }).catch(() => {});
 }
 
-if (eqBass) eqBass.addEventListener('input', () => { if (bassFilter) bassFilter.gain.value = parseFloat(eqBass.value); });
-if (eqMid) eqMid.addEventListener('input', () => { if (midFilter) midFilter.gain.value = parseFloat(eqMid.value); });
-if (eqTreble) eqTreble.addEventListener('input', () => { if (trebleFilter) trebleFilter.gain.value = parseFloat(eqTreble.value); });
+const updateEqGraph = () => {
+    if (!audioCtx && !mainPlayer.paused && hasActiveAudioProcessing()) setupAudioGraph();
+    if (bassFilter) bassFilter.gain.value = parseFloat(eqBass?.value) || 0;
+    if (midFilter) midFilter.gain.value = parseFloat(eqMid?.value) || 0;
+    if (trebleFilter) trebleFilter.gain.value = parseFloat(eqTreble?.value) || 0;
+};
+
+if (eqBass) eqBass.addEventListener('input', updateEqGraph);
+if (eqMid) eqMid.addEventListener('input', updateEqGraph);
+if (eqTreble) eqTreble.addEventListener('input', updateEqGraph);
 if (eqBass) eqBass.addEventListener('change', saveEqSettings);
 if (eqMid) eqMid.addEventListener('change', saveEqSettings);
 if (eqTreble) eqTreble.addEventListener('change', saveEqSettings);
 if (normalizeToggle) normalizeToggle.addEventListener('change', () => {
+    if (!audioCtx && !mainPlayer.paused && normalizeToggle.checked) setupAudioGraph();
     setNormalization(normalizeToggle.checked);
     if (window.electronAPI) {
         window.electronAPI.saveSettings({ normalize: normalizeToggle.checked }).catch(() => {});
