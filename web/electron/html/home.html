@@ -5,7 +5,6 @@
 <title>Fancy Offline Music Player</title>
 <link rel="stylesheet" href="../stylesheet/persistant.css">
 <link rel="stylesheet" href="../stylesheet/home.css">
-<script src="../node_modules/jsmediatags/dist/jsmediatags.min.js"></script>
 </head>
 
 <body>
@@ -57,7 +56,7 @@
 
     <div class="tracklist-container">
         <div class="tracklist-header">
-            <div>#</div>
+            <div title="Drag a song row to reorder">↕</div>
             <div>Title</div>
             <div>Album</div>
             <div></div>
@@ -67,6 +66,7 @@
     </div>
 
     <section class="lyrics-view" id="lyrics-view" aria-live="polite" aria-label="Lyrics">
+        <img class="fullscreen-cover-bg" id="fullscreen-cover-bg" src="../images/music.png" alt="" aria-hidden="true">
         <button id="fullscreen-exit-btn" class="fullscreen-exit-btn" type="button" title="Exit fullscreen player">Exit fullscreen</button>
         <div class="lyrics-heading">
             <img id="lyrics-cover" src="../images/music.png" alt="Album cover">
