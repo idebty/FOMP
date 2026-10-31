@@ -10,9 +10,11 @@ function syncMiniTrackInfo(track) {
     const title = document.getElementById('mini-track-title');
     const artist = document.getElementById('mini-track-artist');
     const cover = document.getElementById('mini-track-cover');
+    const fullscreenCover = document.getElementById('fullscreen-cover-bg');
     if (title) title.textContent = track ? (track.data?.title || stripExtension(track.name) || 'Unknown Title') : 'Nothing playing';
     if (artist) artist.textContent = track?.data?.artist || '';
     if (cover) cover.src = artworkSource(track);
+    if (fullscreenCover) fullscreenCover.src = artworkSource(track);
 }
 
 miniPlayerToggle?.addEventListener('click', async () => {
@@ -46,6 +48,11 @@ let selectedPlaylist = null;
 let playbackQueue = null;
 let playbackSequence = 0;
 let countedPlaybackSequence = -1;
+let libraryDragTrackPath = null;
+let suppressLibraryClickUntil = 0;
+let notifiedNextSequence = -1;
+let scheduledNextTrackIndex = -1;
+let lastDiscordPresenceUpdateAt = 0;
 
 const { DEFAULT_COVER, SUPPORTED_EXTENSIONS, escapeHtml, stripExtension, imageMimeType, artworkSource, albumKey: getAlbumKey, formatTime } = window.musicCommon;
 
@@ -73,6 +80,11 @@ document.addEventListener('keydown', async event => {
     if (!playlist[currentTrackIndex]) return;
 
     event.preventDefault();
+    await toggleFullscreenHotkey();
+});
+
+async function toggleFullscreenHotkey() {
+    if (!playlist[currentTrackIndex]) return;
     if (document.body.classList.contains('fullscreen-player-mode')) {
         await window.electronAPI?.setFullscreenPlayer(false);
         return;
@@ -84,7 +96,7 @@ document.addEventListener('keydown', async event => {
         if (restored === false) document.body.classList.remove('mini-player-mode');
     }
     await window.electronAPI?.setFullscreenPlayer(true);
-});
+}
 
 function getAlbumTracks(key) {
     return playlist.filter(track => getAlbumKey(track) === key);
@@ -107,7 +119,7 @@ function renderTopPlaylists() {
     if (!window.electronAPI?.getPlaylists) return;
     window.electronAPI.getPlaylists().then(saved => {
         window.musicCommon.renderMostPlayedPlaylists(playlist, saved || [], item => {
-            window.location.replace(`../html/home.html?playlist=${encodeURIComponent(item.id)}`);
+            window.navigateApp(`../html/home.html?playlist=${encodeURIComponent(item.id)}`);
         });
     }).catch(error => console.error('Could not load most played playlists:', error));
 }
@@ -160,6 +172,23 @@ function renderTracklist(query = '') {
     renderTopPlaylists();
 }
 
+function reorderLibraryTrack(sourcePath, targetPath) {
+    if (!sourcePath || !targetPath || sourcePath === targetPath) return;
+    const sourceIndex = playlist.findIndex(track => track.path === sourcePath);
+    const targetIndex = playlist.findIndex(track => track.path === targetPath);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const currentPath = playlist[currentTrackIndex]?.path;
+    const queuePaths = playbackQueue?.map(index => playlist[index]?.path).filter(Boolean) || null;
+    const [track] = playlist.splice(sourceIndex, 1);
+    playlist.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, track);
+    currentTrackIndex = currentPath ? playlist.findIndex(item => item.path === currentPath) : -1;
+    if (queuePaths) playbackQueue = queuePaths.map(trackPath => playlist.findIndex(item => item.path === trackPath)).filter(index => index >= 0);
+    renderTracklist(document.getElementById('sidebar-search')?.value || '');
+    window.electronAPI?.reorderTracks(playlist.map(item => item.path))
+        .then(result => { if (!result?.success) console.error('Could not save the new library order:', result?.error); })
+        .catch(error => console.error('Could not save the new library order:', error));
+}
+
 function showLibraryView() {
     lyricsController.close();
 }
@@ -169,12 +198,14 @@ window.applyLibrarySearch = (query) => renderTracklist(query);
 function createTrackElement(track, index) {
     const trackItem = document.createElement('div');
     trackItem.className = 'track-item';
+    trackItem.draggable = true;
+    trackItem.dataset.trackPath = track.path;
 
     trackItem.innerHTML = `
         <div class="track-index">${index + 1}</div>
         <div class="track-info-col">
             <div class="track-cover-wrapper" title="Click to change cover">
-                <img class="track-cover-img" src="${artworkSource(track)}">
+                <img class="track-cover-img" src="${artworkSource(track)}" loading="lazy" decoding="async">
                 <input type="file" class="cover-upload-input" accept="image/*">
             </div>
             <div class="track-text">
@@ -186,6 +217,7 @@ function createTrackElement(track, index) {
         <button class="remove-track-btn" title="Remove song">&#10005;</button>
     `;
     trackItem.addEventListener('click', event => {
+        if (Date.now() < suppressLibraryClickUntil) { event.preventDefault(); return; }
         if (event.detail > 1) return;
         loadTrack(index);
     });
@@ -193,6 +225,35 @@ function createTrackElement(track, index) {
         if (event.target.closest('button, input, [contenteditable="true"], .track-cover-wrapper')) return;
         if (currentTrackIndex !== index) loadTrack(index);
         enterFullscreenPlayer();
+    });
+    trackItem.addEventListener('dragstart', event => {
+        if (event.target.closest('button, input, [contenteditable="true"], .track-cover-wrapper')) {
+            event.preventDefault();
+            return;
+        }
+        libraryDragTrackPath = track.path;
+        suppressLibraryClickUntil = Date.now() + 600;
+        trackItem.classList.add('is-dragging');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', track.path);
+    });
+    trackItem.addEventListener('dragover', event => {
+        if (!libraryDragTrackPath) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        trackItem.classList.add('is-drop-target');
+    });
+    trackItem.addEventListener('dragleave', () => trackItem.classList.remove('is-drop-target'));
+    trackItem.addEventListener('drop', event => {
+        event.preventDefault();
+        trackItem.classList.remove('is-drop-target');
+        const sourcePath = event.dataTransfer.getData('text/plain') || libraryDragTrackPath;
+        reorderLibraryTrack(sourcePath, track.path);
+    });
+    trackItem.addEventListener('dragend', () => {
+        libraryDragTrackPath = null;
+        trackItem.classList.remove('is-dragging');
+        document.querySelectorAll('.track-item.is-drop-target').forEach(element => element.classList.remove('is-drop-target'));
     });
 
     const coverWrapper = trackItem.querySelector('.track-cover-wrapper');
@@ -358,6 +419,10 @@ function updateSeekBar() {
 }
 
 mainPlayer.addEventListener('loadedmetadata', () => {
+    // A source change from Next, Previous, or a shortcut can leave the old
+    // Discord activity visible until the next periodic timeupdate. Refresh as
+    // soon as the new track's duration and artwork metadata are available.
+    if (!mainPlayer.paused) updateDiscordPresence();
     if (seekSlider) {
         seekSlider.max = mainPlayer.duration || 0;
         seekSlider.value = 0;
@@ -384,7 +449,66 @@ mainPlayer.addEventListener('timeupdate', () => {
     }
 
     updateSeekBar();
+    maybeNotifyNextTrack();
+    if (!mainPlayer.paused && Date.now() - lastDiscordPresenceUpdateAt >= 20000) updateDiscordPresence();
 });
+
+// A committed five-second hotkey seek or seek-bar drag should refresh the
+// Discord playback timer. The main process coalesces rapid seeks and rate
+// limits the actual Discord RPC writes.
+mainPlayer.addEventListener('seeked', () => {
+    if (!mainPlayer.paused) updateDiscordPresence();
+});
+
+function getNextTrackIndex() {
+    if (isRepeatOne && currentTrackIndex >= 0) return currentTrackIndex;
+    const queue = playbackQueue || playlist.map((_, index) => index);
+    if (!queue.length) return -1;
+    if (scheduledNextTrackIndex >= 0 && queue.includes(scheduledNextTrackIndex)) return scheduledNextTrackIndex;
+    const queuePosition = queue.indexOf(currentTrackIndex);
+    let nextPosition = queuePosition + 1;
+    if (isShuffle) {
+        const choices = queue.filter(index => index !== currentTrackIndex);
+        if (!choices.length) return isRepeatAll ? currentTrackIndex : -1;
+        scheduledNextTrackIndex = choices[Math.floor(Math.random() * choices.length)];
+        return scheduledNextTrackIndex;
+    }
+    if (nextPosition >= queue.length) {
+        if (!isRepeatAll) return -1;
+        nextPosition = 0;
+    }
+    scheduledNextTrackIndex = queue[nextPosition];
+    return scheduledNextTrackIndex;
+}
+
+function maybeNotifyNextTrack() {
+    if (notifiedNextSequence === playbackSequence || !Number.isFinite(mainPlayer.duration) || mainPlayer.duration <= 0 || mainPlayer.paused) return;
+    const remaining = mainPlayer.duration - mainPlayer.currentTime;
+    if (remaining <= 0 || remaining > 5) return;
+    const nextIndex = getNextTrackIndex();
+    const nextTrack = playlist[nextIndex];
+    if (!nextTrack) return;
+    notifiedNextSequence = playbackSequence;
+    window.electronAPI?.notifyNextTrack({
+        title: nextTrack.data?.title || stripExtension(nextTrack.name) || 'Unknown Title',
+        artist: nextTrack.data?.artist || ''
+    });
+}
+
+function updateDiscordPresence() {
+    const track = playlist[currentTrackIndex];
+    if (!track || !window.electronAPI?.updateDiscordPresence) return;
+    lastDiscordPresenceUpdateAt = Date.now();
+    window.electronAPI.updateDiscordPresence({
+        trackPath: track.path,
+        title: track.data?.title || stripExtension(track.name) || 'Unknown Title',
+        artist: track.data?.artist || '',
+        imagePath: track.imagePath || '',
+        playing: !mainPlayer.paused,
+        currentTime: mainPlayer.currentTime || 0,
+        duration: Number.isFinite(mainPlayer.duration) ? mainPlayer.duration : 0
+    }).catch(error => console.error('Could not update Discord Rich Presence:', error));
+}
 
 
 mainPlayer.addEventListener('ended', () => {
@@ -444,6 +568,7 @@ if (seekSlider) {
 let sessionSaveTimer = null;
 let isLeavingPage = false;
 let wasPlayingBeforeLeave = false;
+let lastSnapshotSecond = -1;
 
 function savePlaybackSnapshot(isPlaying = !mainPlayer.paused) {
     const track = playlist[currentTrackIndex];
@@ -470,7 +595,11 @@ function saveSession() {
 }
 
 mainPlayer.addEventListener('timeupdate', () => {
-    savePlaybackSnapshot(!mainPlayer.paused);
+    const currentSecond = Math.floor(mainPlayer.currentTime);
+    if (currentSecond !== lastSnapshotSecond) {
+        lastSnapshotSecond = currentSecond;
+        savePlaybackSnapshot(!mainPlayer.paused);
+    }
     if (sessionSaveTimer) return;
     sessionSaveTimer = setTimeout(() => {
         sessionSaveTimer = null;
@@ -482,11 +611,16 @@ mainPlayer.addEventListener('pause', () => {
     if (!isLeavingPage) savePlaybackSnapshot(false);
     saveSession();
 });
-window.addEventListener('beforeunload', () => {
+window.addEventListener('pagehide', () => {
     isLeavingPage = true;
     wasPlayingBeforeLeave = !mainPlayer.paused;
     savePlaybackSnapshot(wasPlayingBeforeLeave);
     saveSession();
+});
+window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    isLeavingPage = false;
+    try { sessionStorage.removeItem('wuom-playback-snapshot'); } catch (_) {}
 });
 
 
@@ -609,7 +743,12 @@ function loadTrack(index) {
     currentTrackIndex = index;
     playbackSequence += 1;
     countedPlaybackSequence = -1;
+    notifiedNextSequence = -1;
+    scheduledNextTrackIndex = -1;
     mainPlayer.src = window.electronAPI.toMediaUrl(track.path);
+    // Send the selected track immediately; the play/metadata events refresh
+    // playback timestamps once the media element has resumed and loaded.
+    updateDiscordPresence();
     updateHeaderCover();
     lyricsController.setTrack(track);
     
@@ -648,29 +787,30 @@ playBtn.addEventListener('click', () => {
 });
 
 mainPlayer.addEventListener('play', () => {
-    playIcon.src = '../images/pause.png'; 
+    playIcon.src = '../images/pause.png';
+    updateDiscordPresence();
 });
 
 mainPlayer.addEventListener('pause', () => {
     playIcon.src = '../images/play.png';
+    updateDiscordPresence();
 });
 
 function playNext() {
     const queue = playbackQueue || playlist.map((_, index) => index);
     if (queue.length === 0) return;
-    const queuePosition = queue.indexOf(currentTrackIndex);
-    let nextPosition = queuePosition + 1;
-    
-    if (isShuffle) {
-        nextPosition = Math.floor(Math.random() * queue.length);
-    } else if (nextPosition >= queue.length) {
-        if (isRepeatAll) {
+    const nextIndex = scheduledNextTrackIndex >= 0 && queue.includes(scheduledNextTrackIndex) ? scheduledNextTrackIndex : (() => {
+        const queuePosition = queue.indexOf(currentTrackIndex);
+        let nextPosition = queuePosition + 1;
+        if (isShuffle) return queue[Math.floor(Math.random() * queue.length)];
+        if (nextPosition >= queue.length) {
+            if (!isRepeatAll) return -1;
             nextPosition = 0;
-        } else {
-            return;
         }
-    }
-    loadTrack(queue[nextPosition]);
+        return queue[nextPosition];
+    })();
+    scheduledNextTrackIndex = -1;
+    if (nextIndex >= 0) loadTrack(nextIndex);
 }
 
 function playPrev() {
@@ -792,8 +932,40 @@ function changeVolumeHotkey(delta) {
     }
 }
 
+function isConfiguredBackgroundHotkey(event) {
+    if (!appSettings.backgroundHotkeysEnabled) return false;
+    let key = event.code === 'Space' ? 'Space' : event.key;
+    if (/^Key[A-Z]$/.test(event.code)) key = event.code.slice(3);
+    else if (/^Digit[0-9]$/.test(event.code)) key = event.code.slice(5);
+    else if (key.startsWith('Arrow')) key = key.slice(5);
+    else if (key === ' ') key = 'Space';
+    else if (key === 'Enter') key = 'Return';
+    const actualKey = String(key).toLowerCase();
+    const actualModifiers = [];
+    if (event.ctrlKey) actualModifiers.push('control');
+    if (event.altKey) actualModifiers.push('alt');
+    if (event.shiftKey) actualModifiers.push('shift');
+    if (event.metaKey) actualModifiers.push('super');
+
+    return Object.values(appSettings.backgroundHotkeys || {}).some(accelerator => {
+        const parts = accelerator.split('+');
+        const configuredKey = parts.pop().toLowerCase();
+        const configuredModifiers = parts.map(modifier => {
+            const normalized = modifier.toLowerCase();
+            if (normalized === 'commandorcontrol') {
+                return navigator.platform.toLowerCase().includes('mac') ? 'super' : 'control';
+            }
+            return normalized === 'meta' ? 'super' : normalized;
+        }).sort();
+        return configuredKey === actualKey &&
+            configuredModifiers.join('+') === actualModifiers.sort().join('+');
+    });
+}
+
 document.addEventListener('keydown', (event) => {
     if (isEditableHotkeyTarget(event.target)) return;
+    if (isConfiguredBackgroundHotkey(event)) return;
+    if (event.ctrlKey && event.altKey) return;
 
     if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
@@ -838,6 +1010,22 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
+window.electronAPI?.onGlobalPlayerHotkey(action => {
+    switch (action) {
+        case 'toggle-fullscreen': toggleFullscreenHotkey(); break;
+        case 'toggle-playback': togglePlaybackHotkey(); break;
+        case 'previous-track': playPrev(); break;
+        case 'next-track': playNext(); break;
+        case 'seek-back': seekHotkey(-5); break;
+        case 'seek-forward': seekHotkey(5); break;
+        case 'volume-up': changeVolumeHotkey(1); break;
+        case 'volume-down': changeVolumeHotkey(-1); break;
+    }
+});
+window.electronAPI?.onBackgroundHotkeyStatus(status => {
+    appSettings.backgroundHotkeysEnabled = status.enabled === true;
+});
+
 document.addEventListener('keyup', (event) => {
     if (
         event.key === 'ArrowLeft' ||
@@ -858,10 +1046,14 @@ window.addEventListener('blur', () => {
     hotkeyRepeatTimers.clear();
 });
 
-function addTrack(filePath, fileName, data, imageUrl, saveToDb = true) {
+function addTrack(filePath, fileName, data, imageSource, saveToDb = true) {
     if (playlist.find(t => t.path === filePath)) return;
 
-    const trackObj = { path: filePath, name: fileName, data, imageUrl: imageUrl || '' };
+    const trackObj = { path: filePath, name: fileName, data };
+    if (imageSource) {
+        if (imageSource.startsWith('artwork/')) trackObj.imagePath = imageSource;
+        else trackObj.imageUrl = imageSource;
+    }
     playlist.push(trackObj);
     renderTracklist();
 
@@ -892,33 +1084,13 @@ fileUpload.addEventListener('change', (event) => {
             return;
         }
 
-        jsmediatags.read(file, {
-            onSuccess: function(tag) {
-                const data = tag.tags;
-                let imageUrl = '';
-                
-                if (data.picture) {
-                    const { data: pictureData, format } = data.picture;
-                    const mimeType = imageMimeType(format, pictureData);
-                    let base64String = '';
-                    for (let i = 0; i < pictureData.length; i++) {
-                        base64String += String.fromCharCode(pictureData[i]);
-                    }
-                    if (mimeType) imageUrl = `data:${mimeType};base64,${window.btoa(base64String)}`;
-                }
-
-                const cleanData = {
-                    title: data.title,
-                    artist: data.artist,
-                    album: data.album
-                };
-
-                addTrack(filePath, file.name, cleanData, imageUrl, true);
-            },
-            onError: function() {
-                addTrack(filePath, file.name, {}, '', true);
-            }
-        });
+        window.electronAPI.readMetadata(filePath)
+            .then(metadata => addTrack(filePath, file.name, {
+                title: metadata.title,
+                artist: metadata.artist,
+                album: metadata.album
+            }, metadata.imagePath || '', true))
+            .catch(() => addTrack(filePath, file.name, {}, '', true));
     });
     
     fileUpload.value = '';
@@ -945,6 +1117,11 @@ function applyEqSettings() {
 
 let audioCtx = null;
 let bassFilter, midFilter, trebleFilter, compressor, gainNode, sourceNode;
+
+function hasActiveAudioProcessing() {
+    return Boolean(normalizeToggle?.checked) ||
+        [eqBass, eqMid, eqTreble].some(slider => Math.abs(Number(slider?.value) || 0) > 0.001);
+}
 
 function setupAudioGraph() {
     if (audioCtx) return;
@@ -1002,11 +1179,11 @@ function setNormalization(enabled) {
 mainPlayer.crossOrigin = 'anonymous';
 
 mainPlayer.addEventListener('play', () => {
-    if (!audioCtx) {
+    if (!audioCtx && hasActiveAudioProcessing()) {
         setupAudioGraph();
         setNormalization(normalizeToggle ? normalizeToggle.checked : false);
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
 });
 
 if (eqToggleBtn && eqPanel) {
@@ -1031,13 +1208,21 @@ function saveEqSettings() {
     }).catch(() => {});
 }
 
-if (eqBass) eqBass.addEventListener('input', () => { if (bassFilter) bassFilter.gain.value = parseFloat(eqBass.value); });
-if (eqMid) eqMid.addEventListener('input', () => { if (midFilter) midFilter.gain.value = parseFloat(eqMid.value); });
-if (eqTreble) eqTreble.addEventListener('input', () => { if (trebleFilter) trebleFilter.gain.value = parseFloat(eqTreble.value); });
+const updateEqGraph = () => {
+    if (!audioCtx && !mainPlayer.paused && hasActiveAudioProcessing()) setupAudioGraph();
+    if (bassFilter) bassFilter.gain.value = parseFloat(eqBass?.value) || 0;
+    if (midFilter) midFilter.gain.value = parseFloat(eqMid?.value) || 0;
+    if (trebleFilter) trebleFilter.gain.value = parseFloat(eqTreble?.value) || 0;
+};
+
+if (eqBass) eqBass.addEventListener('input', updateEqGraph);
+if (eqMid) eqMid.addEventListener('input', updateEqGraph);
+if (eqTreble) eqTreble.addEventListener('input', updateEqGraph);
 if (eqBass) eqBass.addEventListener('change', saveEqSettings);
 if (eqMid) eqMid.addEventListener('change', saveEqSettings);
 if (eqTreble) eqTreble.addEventListener('change', saveEqSettings);
 if (normalizeToggle) normalizeToggle.addEventListener('change', () => {
+    if (!audioCtx && !mainPlayer.paused && normalizeToggle.checked) setupAudioGraph();
     setNormalization(normalizeToggle.checked);
     if (window.electronAPI) {
         window.electronAPI.saveSettings({ normalize: normalizeToggle.checked }).catch(() => {});
