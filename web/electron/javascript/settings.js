@@ -2,6 +2,7 @@
 // settings.js
 const hwAccelToggle = document.getElementById('hw-accel-toggle');
 const startupPageSelect = document.getElementById('startup-page-select');
+const homeHeaderCollapseToggle = document.getElementById('home-header-collapse-toggle');
 const autoMiniPlayerToggle = document.getElementById('auto-mini-player-toggle');
 const miniPlayerTopToggle = document.getElementById('mini-player-top-toggle');
 const discordPresenceToggle = document.getElementById('discord-presence-toggle');
@@ -11,6 +12,8 @@ const githubOwnerInput = document.getElementById('github-owner');
 const githubRepositoryInput = document.getElementById('github-repository');
 const githubBranchInput = document.getElementById('github-branch');
 const githubTokenInput = document.getElementById('github-token');
+const artProvider = document.getElementById('discord-art-provider');
+const imgurClientId = document.getElementById('imgur-client-id');
 const saveDiscordSettingsBtn = document.getElementById('save-discord-settings-btn');
 const discordSettingsStatus = document.getElementById('discord-settings-status');
 const resumeSessionToggle = document.getElementById('resume-session-toggle');
@@ -58,6 +61,8 @@ async function loadSettings() {
 
     hwAccelToggle.checked = settings.hardwareAcceleration !== false;
     startupPageSelect.value = settings.startupPage || 'home';
+    startupPageSelect.dispatchEvent(new Event('app-select-sync'));
+    homeHeaderCollapseToggle.checked = settings.homeHeaderCollapse !== false;
     autoMiniPlayerToggle.checked = settings.autoMiniPlayer !== false;
     miniPlayerTopToggle.checked = settings.miniPlayerAlwaysOnTop !== false;
     discordPresenceToggle.checked = settings.discordPresenceEnabled === true;
@@ -66,6 +71,8 @@ async function loadSettings() {
     githubOwnerInput.value = settings.githubOwner || '';
     githubRepositoryInput.value = settings.githubRepository || '';
     githubBranchInput.value = settings.githubBranch || 'main';
+    if (artProvider) { artProvider.value = settings.discordArtProvider || 'github'; setArtworkProvider(artProvider.value); }
+    if (imgurClientId) imgurClientId.value = settings.imgurClientId || '';
     resumeSessionToggle.checked = settings.resumeSession !== false;
     backgroundHotkeysToggle.checked = settings.backgroundHotkeysEnabled === true;
     backgroundHotkeys = { ...defaultBackgroundHotkeys, ...(settings.backgroundHotkeys || {}) };
@@ -93,6 +100,24 @@ async function loadSettings() {
     refreshDiscordPresenceStatus();
 }
 
+window.addEventListener('music-settings-change', event => {
+    const changes = event.detail || {};
+    if (typeof changes.volume === 'number') {
+        defaultVolumeSlider.value = Math.round(changes.volume * 100);
+        defaultVolumeValue.textContent = `${defaultVolumeSlider.value}%`;
+    }
+    if (Object.hasOwn(changes, 'muted')) mutedToggle.checked = !!changes.muted;
+    if (changes.eq) {
+        eqBassSlider.value = changes.eq.bass ?? eqBassSlider.value;
+        eqBassValue.textContent = `${eqBassSlider.value}dB`;
+        eqMidSlider.value = changes.eq.mid ?? eqMidSlider.value;
+        eqMidValue.textContent = `${eqMidSlider.value}dB`;
+        eqTrebleSlider.value = changes.eq.treble ?? eqTrebleSlider.value;
+        eqTrebleValue.textContent = `${eqTrebleSlider.value}dB`;
+    }
+    if (Object.hasOwn(changes, 'normalize')) normalizeToggle.checked = !!changes.normalize;
+});
+
 async function refreshDiscordPresenceStatus() {
     if (!window.electronAPI?.getDiscordPresenceStatus || !discordSettingsStatus) return;
     try {
@@ -110,7 +135,12 @@ setInterval(refreshDiscordPresenceStatus, 2500);
 
 function saveSettings(partial) {
     if (!window.electronAPI) return;
-    return window.electronAPI.saveSettings(partial).catch(err => {
+    return window.electronAPI.saveSettings(partial).then(result => {
+        if (result?.success !== false) {
+            window.dispatchEvent(new CustomEvent('music-settings-change', { detail: partial }));
+        }
+        return result;
+    }).catch(err => {
         console.error('Failed to save settings:', err);
         return { success: false, error: 'Could not save settings.' };
     });
@@ -136,6 +166,8 @@ saveDiscordSettingsBtn?.addEventListener('click', async () => {
         discordPresenceEnabled: discordPresenceToggle.checked,
         discordClientId: clientId,
         discordArtEnabled: discordArtToggle.checked,
+        discordArtProvider: artProvider?.value || 'github',
+        imgurClientId: imgurClientId?.value.trim() || '',
         githubOwner: githubOwnerInput.value.trim(),
         githubRepository: githubRepositoryInput.value.trim(),
         githubBranch: githubBranchInput.value.trim() || 'main'
@@ -148,6 +180,38 @@ saveDiscordSettingsBtn?.addEventListener('click', async () => {
     discordSettingsStatus.textContent = 'Saved. Checking Discord connection…';
     refreshDiscordPresenceStatus();
 });
+
+function setArtworkProvider(provider) {
+    if (artProvider) artProvider.value = provider;
+    document.querySelectorAll('.art-provider-tab').forEach(tab => { const active = tab.dataset.provider === provider; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); });
+    document.querySelectorAll('[data-provider-fields]').forEach(section => { section.hidden = section.dataset.providerFields !== provider; });
+}
+document.querySelectorAll('.art-provider-tab').forEach(tab => tab.addEventListener('click', () => setArtworkProvider(tab.dataset.provider)));
+
+const defaultStyleGuide = `/* CUSTOM STYLESHEET — standard CSS, applied after built-in styles on every app page.
+   Save and Apply to preview. This guide is comments only until you add rules.
+
+   Shared color variables (available everywhere):
+   --bg-primary (main black), --bg-secondary (dark panels), --bg-card (translucent cards)
+   --bg-input / --bg-input-hover (fields), --text-primary / --text-secondary / --text-muted
+   --border-color / --border-light, --accent / --accent-hover
+   --danger / --danger-bg / --danger-border
+   Shared shape and motion: --radius-sm / --radius-md / --radius-lg, --transition
+
+   Use any normal CSS selector. Examples:
+   body { background: var(--bg-primary); }
+   .settings-section { border-color: var(--accent); }
+   .sidebar { background: var(--bg-secondary); }
+*/
+`;
+const editor = document.getElementById('style-editor');
+const settingsContainer = document.querySelector('.settings-container');
+const styleInput = document.getElementById('custom-stylesheet');
+function showStyleEditor(show) { if (!editor || !settingsContainer) return; editor.hidden = !show; settingsContainer.hidden = show; }
+document.getElementById('open-style-editor')?.addEventListener('click', async () => { const settings = await window.electronAPI.getSettings(); styleInput.value = settings.customStylesheet || defaultStyleGuide; showStyleEditor(true); styleInput.focus(); });
+document.getElementById('back-from-style')?.addEventListener('click', () => showStyleEditor(false));
+document.getElementById('save-style')?.addEventListener('click', async () => { const result = await saveSettings({ customStylesheet: styleInput.value }); if (result?.success) { window.applyCustomStylesheet?.(styleInput.value); document.getElementById('style-status').textContent = 'Saved and applied.'; } else document.getElementById('style-status').textContent = result?.error || 'Could not save styles.'; });
+document.getElementById('reset-style')?.addEventListener('click', () => { styleInput.value = defaultStyleGuide; });
 
 function formatHotkey(accelerator) {
     return accelerator.split('+').map(part => ({
@@ -275,6 +339,10 @@ hwAccelToggle.addEventListener('change', () => {
 
 startupPageSelect.addEventListener('change', () => {
     saveSettings({ startupPage: startupPageSelect.value });
+});
+
+homeHeaderCollapseToggle.addEventListener('change', () => {
+    saveSettings({ homeHeaderCollapse: homeHeaderCollapseToggle.checked });
 });
 
 autoMiniPlayerToggle.addEventListener('change', () => {
