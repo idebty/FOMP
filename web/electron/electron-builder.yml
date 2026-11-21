@@ -12,7 +12,9 @@ files:
   - javascript/**/*
   - images/**/*
   - node_modules/jsmediatags/dist/**/*
-
+  - artwork-image.js
+  - flib-archive.js
+  
 win:
   icon: icon.ico
 
