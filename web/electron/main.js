@@ -1,13 +1,18 @@
 
 
-const { app, BrowserWindow, ipcMain, protocol, shell, Menu, dialog, globalShortcut, safeStorage, nativeImage, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, shell, Menu, dialog, globalShortcut, safeStorage, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const net = require('net');
 const { Readable } = require('stream');
 const jsmediatags = require('jsmediatags');
+const artworkImage = require('./artwork-image');
 const { writeZipArchive, readZipDirectory, extractZipEntry } = require('./flib-archive');
+
+const chromiumFeatures = new Set(app.commandLine.getSwitchValue('enable-features').split(',').map(value => value.trim()).filter(Boolean));
+chromiumFeatures.add('JXLImageFormat');
+app.commandLine.appendSwitch('enable-features', [...chromiumFeatures].join(','));
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -16,7 +21,10 @@ if (!gotLock) {
 }
 
 let mainWindowRef = null;
+let nextTrackNotificationWindow = null;
+let nextTrackNotificationTimer = null;
 let miniPlayerRestoreBounds = null;
+let miniPlayerRestoreTitle = null;
 let miniPlayerMode = false;
 let miniPlayerAlwaysOnTop = true;
 let autoMiniPlayerEnabled = true;
@@ -69,12 +77,18 @@ const discordSecretPath = path.join(userDataPath, 'discord-github-token.bin');
 fs.mkdirSync(artworkDir, { recursive: true });
 fs.mkdirSync(lyricsDir, { recursive: true });
 
+const artworkPathAliases = new Map();
+const artworkMasterJobs = new Map();
+const artworkVariantJobs = new Map();
+const ARTWORK_VARIANT_SIZES = Object.freeze({ thumb: 64, cover: 512, large: 1024 });
+
 const IMAGE_TYPES = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/gif': '.gif',
   'image/webp': '.webp',
-  'image/bmp': '.bmp'
+  'image/bmp': '.bmp',
+  'image/jxl': '.jxl'
 };
 
 function normalizeArtworkPath(imagePath) {
@@ -87,7 +101,7 @@ function normalizeArtworkPath(imagePath) {
 
 function imageMimeType(format, bytes) {
   const normalized = typeof format === 'string' ? format.toLowerCase().replace(/^image\//, '') : '';
-  const aliases = { jpg: 'image/jpeg', jpeg: 'image/jpeg', pjpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+  const aliases = { jpg: 'image/jpeg', jpeg: 'image/jpeg', pjpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', jxl: 'image/jxl' };
   const declaredType = aliases[normalized] || (format && format.toLowerCase());
   if (declaredType && IMAGE_TYPES[declaredType]) return declaredType;
 
@@ -96,6 +110,7 @@ function imageMimeType(format, bytes) {
   if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))) return 'image/gif';
   if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
   if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp';
+  if (artworkImage.isJxl(bytes)) return 'image/jxl';
   return '';
 }
 
@@ -111,7 +126,7 @@ function saveArtworkBytes(format, data) {
 
 function saveArtwork(value) {
   if (typeof value !== 'string' || !value) return '';
-  const existingPath = normalizeArtworkPath(value);
+  const existingPath = resolveArtworkPath(value);
   if (existingPath) return existingPath;
 
   const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)$/);
@@ -129,7 +144,7 @@ function normalizeTrackArtwork(track) {
     changed = true;
   }
   if (typeof track.imagePath === 'string') {
-    const imagePath = normalizeArtworkPath(track.imagePath);
+    const imagePath = resolveArtworkPath(track.imagePath);
     if (imagePath !== track.imagePath) {
       track.imagePath = imagePath;
       changed = true;
@@ -148,7 +163,7 @@ function normalizePlaylistArtwork(playlist) {
     changed = true;
   }
   if (typeof playlist.coverImagePath === 'string') {
-    const imagePath = normalizeArtworkPath(playlist.coverImagePath);
+    const imagePath = resolveArtworkPath(playlist.coverImagePath);
     if (imagePath !== playlist.coverImagePath) {
       playlist.coverImagePath = imagePath || null;
       changed = true;
@@ -161,7 +176,7 @@ function normalizePlaylistArtwork(playlist) {
 }
 
 function artworkDataUrl(imagePath) {
-  const normalizedPath = normalizeArtworkPath(imagePath);
+  const normalizedPath = resolveArtworkPath(imagePath);
   if (!normalizedPath) return '';
   const extension = path.extname(normalizedPath).toLowerCase();
   const mimeType = Object.entries(IMAGE_TYPES).find(([, ext]) => ext === extension)?.[0];
@@ -178,6 +193,7 @@ const DEFAULT_SETTINGS = {
   watchFolder: null,
   resumeSession: true,
   startupPage: 'home',
+  homeHeaderCollapse: true,
   hardwareAcceleration: true,
   lastSession: { trackPath: null, position: 0 },
   eq: { bass: 0, mid: 0, treble: 0 },
@@ -187,6 +203,8 @@ const DEFAULT_SETTINGS = {
   discordPresenceEnabled: false,
   discordClientId: '',
   discordArtEnabled: true,
+  discordArtProvider: 'github',
+  imgurClientId: '',
   githubOwner: '',
   githubRepository: '',
   githubBranch: 'main',
@@ -407,21 +425,33 @@ function connectDiscord() {
   connectNext();
 }
 
+function discordArtworkTarget(settings) {
+  return settings.discordArtProvider === 'imgur' ? `imgur/${settings.imgurClientId || ''}` : `github/${settings.githubOwner}/${settings.githubRepository}/${settings.githubBranch || 'main'}`;
+}
+
+function hasDiscordArtworkCredentials(settings) {
+  return settings.discordArtProvider === 'imgur' ? Boolean(settings.imgurClientId) : Boolean(settings.githubOwner && settings.githubRepository && getGithubToken());
+}
+
 async function publishDiscordArtwork(imagePath, settings) {
+  const provider = settings.discordArtProvider === 'imgur' ? 'imgur' : 'github';
   const token = getGithubToken();
-  if (!token || !settings.githubOwner || !settings.githubRepository) return '';
-  const normalizedPath = normalizeArtworkPath(imagePath);
+  if (provider === 'github' && (!token || !settings.githubOwner || !settings.githubRepository)) return '';
+  if (provider === 'imgur' && !settings.imgurClientId) return '';
+  const normalizedPath = resolveArtworkPath(imagePath);
   if (!normalizedPath) return '';
   const diskPath = path.join(userDataPath, normalizedPath);
-  const image = nativeImage.createFromPath(diskPath);
-  if (image.isEmpty()) return '';
-  const { width, height } = image.getSize();
-  const side = Math.min(width, height);
-  const square = image.crop({ x: Math.floor((width - side) / 2), y: Math.floor((height - side) / 2), width: side, height: side }).resize({ width: 512, height: 512 });
-  const pngBytes = square.toPNG();
+  const pngBytes = await artworkImage.createSquarePng(await fs.promises.readFile(diskPath), 512);
   const digest = crypto.createHash('sha256').update(pngBytes).digest('hex');
-  const cacheKey = `${settings.githubOwner}/${settings.githubRepository}/${settings.githubBranch || 'main'}/${digest}`;
+  const cacheKey = provider === 'imgur' ? `imgur/${settings.imgurClientId}/${digest}` : `github/${settings.githubOwner}/${settings.githubRepository}/${settings.githubBranch || 'main'}/${digest}`;
   if (discordArtworkUrls.has(cacheKey)) return discordArtworkUrls.get(cacheKey);
+  if (provider === 'imgur') {
+    const response = await fetch('https://api.imgur.com/3/image', { method: 'POST', headers: { Authorization: `Client-ID ${settings.imgurClientId}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ image: pngBytes.toString('base64'), type: 'base64', name: `${digest}.png` }), signal: AbortSignal.timeout(20000) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success || typeof result.data?.link !== 'string') throw new Error(`Imgur upload failed (${response.status}): ${result.data?.error || 'unexpected response'}`);
+    discordArtworkUrls.set(cacheKey, result.data.link);
+    return result.data.link;
+  }
   const owner = encodeURIComponent(settings.githubOwner.trim());
   const repository = encodeURIComponent(settings.githubRepository.trim());
   const filename = `covers/${digest}.png`;
@@ -459,7 +489,7 @@ const discordArtworkQueue = new Set();
 function enqueueDiscordArtworkSync(trackPaths) {
   const settings = readSettings();
   if (!settings.discordPresenceEnabled || settings.discordArtEnabled === false ||
-      !settings.githubOwner || !settings.githubRepository || !getGithubToken()) return;
+      !hasDiscordArtworkCredentials(settings)) return;
   const paths = Array.isArray(trackPaths) ? trackPaths : readLibrary().map(track => track.path);
   paths.filter(Boolean).forEach(trackPath => discordArtworkQueue.add(trackPath));
   if (discordArtworkQueueRunning || !discordArtworkQueue.size) return;
@@ -471,12 +501,12 @@ function enqueueDiscordArtworkSync(trackPaths) {
         discordArtworkQueue.delete(trackPath);
         const uploadSettings = readSettings();
         if (!uploadSettings.discordPresenceEnabled || uploadSettings.discordArtEnabled === false ||
-            !uploadSettings.githubOwner || !uploadSettings.githubRepository || !getGithubToken()) break;
+            !hasDiscordArtworkCredentials(uploadSettings)) break;
         const library = readLibrary();
         const track = library.find(item => item.path === trackPath);
         if (!track?.imagePath) continue;
         const imagePath = track.imagePath;
-        const target = `${uploadSettings.githubOwner}/${uploadSettings.githubRepository}/${uploadSettings.githubBranch || 'main'}`;
+        const target = discordArtworkTarget(uploadSettings);
         try {
           const imageUrl = await publishDiscordArtwork(imagePath, uploadSettings);
           if (!imageUrl) continue;
@@ -612,6 +642,35 @@ ipcMain.handle('read-metadata', async (event, filePath) => {
   });
 });
 
+let lrclibRequestQueue = Promise.resolve();
+let lastLrclibRequestAt = 0;
+
+function fetchLrclib(url) {
+  const request = lrclibRequestQueue.then(async () => {
+    const minimumGapMs = 250;
+    const gap = minimumGapMs - (Date.now() - lastLrclibRequestAt);
+    if (gap > 0) await new Promise(resolve => setTimeout(resolve, gap));
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      lastLrclibRequestAt = Date.now();
+      const response = await fetch(url, {
+        headers: { 'X-User-Agent': 'Fancy Offline Music Player/' + app.getVersion() },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (![429, 503].includes(response.status) || attempt === 2) return response;
+
+      const retryAfter = response.headers.get('retry-after');
+      const retryAfterDate = retryAfter && !/^\d+(?:\.\d+)?$/.test(retryAfter) ? Date.parse(retryAfter) : NaN;
+      const retryDelayMs = retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Number.isFinite(retryAfterDate) ? Math.max(0, retryAfterDate - Date.now()) : 1000;
+      const jitter = Math.random() * Math.max(100, retryDelayMs * 0.3);
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs + jitter));
+    }
+  });
+  lrclibRequestQueue = request.catch(() => {});
+  return request;
+}
 function normalizeLyricsMatchText(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -634,10 +693,7 @@ ipcMain.handle('suggest-lyrics', async (_event, query = {}) => {
     for (const term of searchTerms) {
       const url = new URL('https://lrclib.net/api/search');
       url.searchParams.set('track_name', term);
-      const response = await fetch(url, {
-        headers: { 'X-User-Agent': `Fancy Offline Music Player/${app.getVersion()}` },
-        signal: AbortSignal.timeout(10000)
-      });
+      const response = await fetchLrclib(url);
       if (!response.ok) continue;
       const results = await response.json();
       if (Array.isArray(results)) collected.push(...results);
@@ -699,10 +755,7 @@ ipcMain.handle('find-lyrics', async (_event, query = {}) => {
   }
 
   try {
-    const response = await fetch(url, {
-      headers: { 'X-User-Agent': `Fancy Offline Music Player/${app.getVersion()}` },
-      signal: AbortSignal.timeout(10000)
-    });
+    const response = await fetchLrclib(url);
     if (!response.ok) return { status: 'unavailable' };
 
     const results = await response.json();
@@ -745,9 +798,17 @@ ipcMain.handle('find-lyrics', async (_event, query = {}) => {
 
 const CONTENT_TYPES = {
   '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav'
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.weba': 'audio/webm',
+  '.webm': 'audio/webm'
 };
-const SUPPORTED_EXTENSIONS = /\.(mp3|wav)$/i;
+const SUPPORTED_EXTENSIONS = /\.(mp3|wav|flac|ogg|oga|opus|m4a|aac|weba|webm)$/i;
 
 function trackLyricsBaseName(trackPath) {
   return crypto.createHash('sha256').update(String(trackPath)).digest('hex');
@@ -861,6 +922,119 @@ function writePlaylists(playlists) {
   fs.writeFileSync(playlistsDbPath, JSON.stringify(playlists, null, 2));
 }
 
+function resolveArtworkPath(imagePath) {
+  if (typeof imagePath !== 'string' || !imagePath) return '';
+  const alias = artworkPathAliases.get(imagePath);
+  if (alias) {
+    const resolvedAlias = normalizeArtworkPath(alias);
+    if (resolvedAlias) return resolvedAlias;
+  }
+  return normalizeArtworkPath(imagePath);
+}
+
+function replaceArtworkReferences(previousPath, nextPath) {
+  let libraryChanged = false;
+  let playlistsChanged = false;
+  const replaceTrackCover = track => {
+    if (track && track.imagePath === previousPath) {
+      track.imagePath = nextPath;
+      delete track.imageUrl;
+      return true;
+    }
+    return false;
+  };
+
+  if (fs.existsSync(dbPath)) {
+    const library = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    library.forEach(track => { if (replaceTrackCover(track)) libraryChanged = true; });
+    if (libraryChanged) fs.writeFileSync(dbPath, JSON.stringify(library, null, 2));
+  }
+
+  if (fs.existsSync(playlistsDbPath)) {
+    const playlists = JSON.parse(fs.readFileSync(playlistsDbPath, 'utf8'));
+    playlists.forEach(playlist => {
+      if (playlist.coverImagePath === previousPath) {
+        playlist.coverImagePath = nextPath;
+        delete playlist.coverImage;
+        playlistsChanged = true;
+      }
+      (playlist.tracks || []).forEach(track => { if (replaceTrackCover(track)) playlistsChanged = true; });
+    });
+    if (playlistsChanged) fs.writeFileSync(playlistsDbPath, JSON.stringify(playlists, null, 2));
+  }
+
+  if (libraryChanged || playlistsChanged) notifyLibraryUpdated();
+}
+
+function artworkMasterSize(imagePath) {
+  const match = path.basename(imagePath).match(/^master-(\d+)-[a-f0-9-]+\.jxl$/i);
+  return match ? Number(match[1]) : 0;
+}
+
+async function ensureArtworkMaster(imagePath) {
+  const normalizedPath = resolveArtworkPath(imagePath);
+  if (!normalizedPath) return '';
+  if (artworkMasterSize(normalizedPath)) return normalizedPath;
+  if (artworkMasterJobs.has(normalizedPath)) return artworkMasterJobs.get(normalizedPath);
+
+  const job = (async () => {
+    const sourceFile = path.join(userDataPath, normalizedPath);
+    const sourceBytes = await fs.promises.readFile(sourceFile);
+    const optimized = await artworkImage.createSquareJxl(sourceBytes, 1024);
+    const side = Math.min(optimized.width, optimized.height);
+    const masterName = `master-${side}-${crypto.randomUUID()}.jxl`;
+    const masterPath = `artwork/${masterName}`;
+    const masterFile = path.join(artworkDir, masterName);
+    const temporaryFile = `${masterFile}.tmp`;
+
+    await fs.promises.writeFile(temporaryFile, optimized.buffer);
+    await fs.promises.rename(temporaryFile, masterFile);
+    artworkPathAliases.set(normalizedPath, masterPath);
+    replaceArtworkReferences(normalizedPath, masterPath);
+    await fs.promises.unlink(sourceFile).catch(() => {});
+    return masterPath;
+  })();
+
+  artworkMasterJobs.set(normalizedPath, job);
+  try {
+    return await job;
+  } finally {
+    artworkMasterJobs.delete(normalizedPath);
+  }
+}
+
+async function ensureArtworkVariant(masterPath, requestedSize) {
+  const normalizedMaster = resolveArtworkPath(masterPath);
+  const masterSide = artworkMasterSize(normalizedMaster);
+  if (!normalizedMaster || !masterSide) return '';
+  const side = Math.min(masterSide, Math.max(1, Number(requestedSize) || 1024));
+  if (side >= masterSide) return normalizedMaster;
+
+  const masterId = path.basename(normalizedMaster, '.jxl').replace(/^master-\d+-/, '');
+  const variantName = `variant-${side}-${masterId}.jxl`;
+  const variantPath = `artwork/${variantName}`;
+  const variantFile = path.join(artworkDir, variantName);
+  if (fs.existsSync(variantFile)) return variantPath;
+  const cacheKey = `${normalizedMaster}:${side}`;
+  if (artworkVariantJobs.has(cacheKey)) return artworkVariantJobs.get(cacheKey);
+
+  const job = (async () => {
+    const masterBytes = await fs.promises.readFile(path.join(userDataPath, normalizedMaster));
+    const optimized = await artworkImage.createSquareJxl(masterBytes, side);
+    const temporaryFile = `${variantFile}.tmp`;
+    await fs.promises.writeFile(temporaryFile, optimized.buffer);
+    await fs.promises.rename(temporaryFile, variantFile);
+    return variantPath;
+  })();
+
+  artworkVariantJobs.set(cacheKey, job);
+  try {
+    return await job;
+  } finally {
+    artworkVariantJobs.delete(cacheKey);
+  }
+}
+
 function makePlaylistId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -901,9 +1075,7 @@ function readWatchedMetadata(fullPath) {
 async function addWatchedFile(fullPath, filename) {
   if (!SUPPORTED_EXTENSIONS.test(filename)) return;
   if (readLibrary().some(t => path.resolve(t.path || '') === path.resolve(fullPath))) return;
-  const metadata = path.extname(filename).toLowerCase() === '.mp3'
-    ? await readWatchedMetadata(fullPath)
-    : null;
+  const metadata = await readWatchedMetadata(fullPath);
   const library = readLibrary();
   if (library.some(t => path.resolve(t.path || '') === path.resolve(fullPath))) return;
   const data = metadata && metadata.data;
@@ -969,12 +1141,16 @@ function setMiniPlayerMode(win, enabled, restoreWindowSize = false) {
 
   if (nextMode) {
     const bounds = win.getBounds();
+    miniPlayerRestoreTitle = win.getTitle();
     miniPlayerRestoreBounds = {
       ...bounds,
       width: Math.max(bounds.width, MINI_PLAYER_TRIGGER_WIDTH + 1),
       height: Math.max(bounds.height, MINI_PLAYER_TRIGGER_HEIGHT + 1)
     };
     miniPlayerMode = true;
+    win.setMinimizable(false);
+    win.setMaximizable(false);
+    win.setTitle('');
     miniPlayerAlwaysOnTop = readSettings().miniPlayerAlwaysOnTop !== false;
     win.setMinimumSize(64, 64);
     win.setAspectRatio(1);
@@ -986,6 +1162,12 @@ function setMiniPlayerMode(win, enabled, restoreWindowSize = false) {
     win.webContents.executeJavaScript("document.body.classList.add('mini-player-mode')").catch(() => {});
   } else {
     miniPlayerMode = false;
+    win.setMinimizable(true);
+    win.setMaximizable(true);
+    if (miniPlayerRestoreTitle !== null) {
+      win.setTitle(miniPlayerRestoreTitle);
+      miniPlayerRestoreTitle = null;
+    }
     win.setAlwaysOnTop(false);
     win.setAspectRatio(0);
     win.setMinimumSize(0, 0);
@@ -1033,6 +1215,7 @@ function createWindow() {
   mainWindowRef = win;
   miniPlayerMode = false;
   miniPlayerRestoreBounds = null;
+  miniPlayerRestoreTitle = null;
   miniPlayerAlwaysOnTop = settings.miniPlayerAlwaysOnTop !== false;
   autoMiniPlayerEnabled = settings.autoMiniPlayer !== false;
   win.on('minimize', () => {
@@ -1075,7 +1258,7 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   const startPage = settings.startupPage === 'playlists' ? 'playlists' : 'home';
-  win.loadFile(path.join(__dirname, 'html', `${startPage}.html`));
+  win.loadFile(path.join(__dirname, 'html', 'persistent.html'), { query: { view: startPage } });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
@@ -1089,7 +1272,22 @@ function createWindow() {
     if (url !== win.webContents.getURL() && (url.startsWith('http:') || url.startsWith('https:'))) {
       event.preventDefault();
       shell.openExternal(url);
+      return;
     }
+    // The player is a single-document app. Local page links should be handled
+    // by its History API router so search and track navigation never reload it.
+    if (url.startsWith('file:')) {
+      try {
+        const destination = new URL(url);
+        if (/\.html$/i.test(destination.pathname)) event.preventDefault();
+      } catch (_) {
+        event.preventDefault();
+      }
+    }
+  });
+
+  win.webContents.on('will-frame-navigate', (event, details) => {
+    if (details?.isMainFrame && details.url?.startsWith('file:')) event.preventDefault();
   });
 
   return win;
@@ -1216,23 +1414,36 @@ app.whenReady().then(() => {
   app.setUserTasks([]);
 
   protocol.handle('artwork', async (request) => {
-    const imagePath = new URL(request.url).searchParams.get('path');
-    const normalizedPath = normalizeArtworkPath(imagePath);
+    const url = new URL(request.url);
+    const imagePath = url.searchParams.get('path');
+    const normalizedPath = resolveArtworkPath(imagePath);
     if (!normalizedPath) return new Response('Not found', { status: 404 });
 
     try {
-      const filePath = path.join(userDataPath, normalizedPath);
-      const mimeType = Object.entries(IMAGE_TYPES).find(([, ext]) => ext === path.extname(filePath).toLowerCase())?.[0];
-      if (!mimeType) return new Response('Unsupported image type', { status: 415 });
+      const requestedSize = ARTWORK_VARIANT_SIZES[url.searchParams.get('size')] || ARTWORK_VARIANT_SIZES.large;
+      const masterPath = await ensureArtworkMaster(normalizedPath);
+      const responsePath = await ensureArtworkVariant(masterPath, requestedSize);
+      if (!responsePath) throw new Error('Could not prepare square artwork.');
+      const filePath = path.join(userDataPath, responsePath);
       const imageBytes = await fs.promises.readFile(filePath);
       return new Response(imageBytes, {
         headers: {
-          'Content-Type': mimeType,
+          'Content-Type': 'image/jxl',
           'Cache-Control': 'private, max-age=31536000, immutable'
         }
       });
-    } catch (err) {
-      return new Response('Not found', { status: 404 });
+    } catch (error) {
+      console.warn('Could not prepare a compact artwork image:', error);
+      const fallbackPath = resolveArtworkPath(imagePath);
+      if (!fallbackPath) return new Response('Not found', { status: 404 });
+      const fallbackFile = path.join(userDataPath, fallbackPath);
+      const mimeType = Object.entries(IMAGE_TYPES).find(([, ext]) => ext === path.extname(fallbackFile).toLowerCase())?.[0];
+      if (!mimeType) return new Response('Unsupported image type', { status: 415 });
+      const imageBytes = await fs.promises.readFile(fallbackFile).catch(() => null);
+      if (!imageBytes) return new Response('Not found', { status: 404 });
+      return new Response(imageBytes, {
+        headers: { 'Content-Type': mimeType, 'Cache-Control': 'private, max-age=300' }
+      });
     }
   });
 
@@ -1425,15 +1636,26 @@ const headers = {
       track.data = track.data || {};
       track.data.artist = changes.artist;
     }
+    if (Number.isFinite(Number(changes.duration)) && Number(changes.duration) > 0) {
+      track.data = track.data || {};
+      track.data.duration = Number(changes.duration);
+    }
     writeLibrary(playlist);
-    if (typeof changes.artist === 'string') {
+    if (typeof changes.artist === 'string' || Number.isFinite(Number(changes.duration)) && Number(changes.duration) > 0) {
       const savedPlaylists = readPlaylists();
       let playlistsChanged = false;
       savedPlaylists.forEach(savedPlaylist => (savedPlaylist.tracks || []).forEach(savedTrack => {
         if (savedTrack.path !== trackPath) return;
-        savedTrack.data = savedTrack.data || {};
-        savedTrack.data.artist = changes.artist;
-        playlistsChanged = true;
+        if (typeof changes.artist === 'string') {
+          savedTrack.data = savedTrack.data || {};
+          savedTrack.data.artist = changes.artist;
+          playlistsChanged = true;
+        }
+        if (Number.isFinite(Number(changes.duration)) && Number(changes.duration) > 0) {
+          savedTrack.data = savedTrack.data || {};
+          savedTrack.data.duration = Number(changes.duration);
+          playlistsChanged = true;
+        }
       }));
       if (playlistsChanged) writePlaylists(savedPlaylists);
     }
@@ -1549,7 +1771,7 @@ const headers = {
     const artist = String(input.artist || '').trim().slice(0, 120);
     if (!title) { clearDiscordActivity(); return { success: true }; }
     let imageUrl = '';
-    const target = `${settings.githubOwner}/${settings.githubRepository}/${settings.githubBranch || 'main'}`;
+    const target = discordArtworkTarget(settings);
     if (settings.discordArtEnabled && input.trackPath) {
       const storedTrack = readLibrary().find(track => track.path === input.trackPath);
       if (storedTrack?.discordArtworkTarget === target) imageUrl = storedTrack.discordArtworkUrl || '';
@@ -1576,7 +1798,7 @@ const headers = {
     // Publish the title immediately; attach the cover when its upload finishes.
     clearTimeout(discordArtworkUpdateTimer);
     discordArtworkUpdateTimer = null;
-    if (!imageUrl && settings.discordArtEnabled && input.imagePath && getGithubToken()) {
+    if (!imageUrl && settings.discordArtEnabled && input.imagePath && hasDiscordArtworkCredentials(settings)) {
       discordArtworkUpdateTimer = setTimeout(async () => {
         discordArtworkUpdateTimer = null;
         try {
@@ -1598,12 +1820,67 @@ const headers = {
   ipcMain.handle('notify-next-track', (_event, input = {}) => {
     const title = String(input.title || '').trim().slice(0, 120);
     const artist = String(input.artist || '').trim().slice(0, 120);
-    if (!title || !Notification.isSupported()) return false;
-    new Notification({
-      title: 'Up next',
-      body: artist ? `${title} — ${artist}` : title,
-      silent: true
-    }).show();
+    const duration = String(input.duration || '').trim().slice(0, 24);
+    const cover = artworkDataUrl(input.imagePath);
+    if (!title) return false;
+
+    if (nextTrackNotificationTimer) clearTimeout(nextTrackNotificationTimer);
+    if (nextTrackNotificationWindow && !nextTrackNotificationWindow.isDestroyed()) {
+      nextTrackNotificationWindow.close();
+    }
+
+    const escapeHtml = value => value.replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+    const display = mainWindowRef && !mainWindowRef.isDestroyed()
+      ? screen.getDisplayMatching(mainWindowRef.getBounds())
+      : screen.getPrimaryDisplay();
+    const [width, height] = [400, 112];
+    const x = Math.max(display.workArea.x, display.workArea.x + display.workArea.width - width - 24);
+    const y = Math.max(display.workArea.y, display.workArea.y + display.workArea.height - height - 24);
+    const notification = new BrowserWindow({
+      x, y, width, height,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      focusable: false,
+      show: false,
+      hasShadow: false,
+      alwaysOnTop: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+    });
+    nextTrackNotificationWindow = notification;
+    notification.setAlwaysOnTop(true, 'screen-saver');
+    notification.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    notification.on('closed', () => {
+      if (nextTrackNotificationWindow === notification) nextTrackNotificationWindow = null;
+      if (nextTrackNotificationTimer) clearTimeout(nextTrackNotificationTimer);
+      nextTrackNotificationTimer = null;
+    });
+
+    const subtitle = [artist || 'Unknown artist', duration].filter(Boolean).join(' · ');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;font-family:Segoe UI,Arial,sans-serif;color:#f4f4f5}
+      body{padding:4px}.card{height:104px;display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid rgba(255,255,255,.16);border-radius:14px;background:linear-gradient(145deg,rgba(40,40,44,.98),rgba(19,19,21,.98));box-shadow:0 18px 44px rgba(0,0,0,.5);animation:appear .22s ease-out}
+      .cover{width:68px;height:68px;flex:0 0 68px;object-fit:cover;border-radius:9px;background:#27272a}.icon{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px;border-radius:10px;background:rgba(255,255,255,.1);font-size:22px}
+      .copy{min-width:0;display:flex;flex-direction:column;gap:5px}.label{color:#a1a1aa;font-size:10px;font-weight:700;letter-spacing:.13em}.title,.subtitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.title{font-size:14px;font-weight:650}.subtitle{color:#c4c4cc;font-size:12px}
+      @keyframes appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    </style></head><body><div class="card">${cover ? `<img class="cover" src="${cover}" alt="">` : `<div class="icon">♫</div>`}<div class="copy"><div class="label">UP NEXT</div><div class="title">${escapeHtml(title)}</div><div class="subtitle">${escapeHtml(subtitle)}</div></div></div></body></html>`;
+    notification.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    notification.once('ready-to-show', () => {
+      if (notification.isDestroyed()) return;
+      notification.showInactive();
+      notification.setAlwaysOnTop(true, 'screen-saver');
+      nextTrackNotificationTimer = setTimeout(() => {
+        if (!notification.isDestroyed()) notification.close();
+      }, 8000);
+      nextTrackNotificationTimer.unref?.();
+    });
     return true;
   });
 
@@ -1620,11 +1897,14 @@ ipcMain.handle('save-settings', (event, partial) => {
   if (Object.prototype.hasOwnProperty.call(partial || {}, 'discordClientId') && discordClientId && !/^\d{10,25}$/.test(discordClientId)) {
     return { success: false, error: 'Discord Application ID must contain 10–25 digits.' };
   }
+  if (Object.prototype.hasOwnProperty.call(partial || {}, 'discordArtProvider') && !['github', 'imgur'].includes(partial.discordArtProvider)) return { success: false, error: 'Choose GitHub or Imgur for artwork storage.' };
   for (const key of ['githubOwner', 'githubRepository', 'githubBranch']) {
     if (Object.prototype.hasOwnProperty.call(partial || {}, key) && String(partial[key] || '').length > 120) {
       return { success: false, error: `${key} is too long.` };
     }
   }
+  if (Object.prototype.hasOwnProperty.call(partial || {}, 'imgurClientId') && String(partial.imgurClientId || '').length > 200) return { success: false, error: 'Imgur Client ID is too long.' };
+  if (Object.prototype.hasOwnProperty.call(partial || {}, 'customStylesheet') && (typeof partial.customStylesheet !== 'string' || partial.customStylesheet.length > 100000)) return { success: false, error: 'Custom stylesheet must be text under 100 KB.' };
   let backgroundHotkeys = current.backgroundHotkeys;
   if (Object.prototype.hasOwnProperty.call(partial || {}, 'backgroundHotkeys')) {
     const validation = validateBackgroundHotkeys(partial.backgroundHotkeys);
@@ -1639,7 +1919,7 @@ ipcMain.handle('save-settings', (event, partial) => {
     lastSession: { ...current.lastSession, ...((partial && partial.lastSession) || {}) }
   };
   writeSettings(merged);
-  if (['discordPresenceEnabled', 'discordArtEnabled', 'githubOwner', 'githubRepository', 'githubBranch'].some(key =>
+  if (['discordPresenceEnabled', 'discordArtEnabled', 'discordArtProvider', 'imgurClientId', 'githubOwner', 'githubRepository', 'githubBranch'].some(key =>
     Object.prototype.hasOwnProperty.call(partial || {}, key))) {
     enqueueDiscordArtworkSync();
   }
@@ -1730,7 +2010,7 @@ ipcMain.handle('save-settings', (event, partial) => {
       }
 
       const addArtwork = sourcePath => {
-        const normalizedPath = normalizeArtworkPath(sourcePath);
+        const normalizedPath = resolveArtworkPath(sourcePath);
         if (!normalizedPath) return '';
         if (artworkPaths.has(normalizedPath)) return artworkPaths.get(normalizedPath);
         const extension = path.extname(normalizedPath).toLowerCase();
