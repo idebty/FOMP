@@ -21,13 +21,6 @@
 }
 
 
-:root {
-    --bg-primary: #000000;
-    --bg-secondary: #1c1c1e;
-    --bg-card: rgba(24, 24, 27, 0.75);
-    --bg-input: #27272a;
-    --bg-input-hover: #3f3f46;
-
     --text-primary: #ffffff;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
@@ -52,7 +45,7 @@
 
 .body_main.settings-page {
     overflow-y: auto;
-    background: linear-gradient(180deg, #1c1c1e 0%, #000000 42%);
+    background: transparent;
 }
 
 .settings-container {
@@ -515,3 +508,21 @@ input:checked + .slider-toggle:before {
         flex: 1 1 auto;
     }
 }
+
+
+/* Custom style editor */
+.style-editor { width: min(100%, 1100px); padding: 36px 40px 48px; box-sizing: border-box; color: var(--text-primary); }
+.style-editor[hidden] { display: none; }
+.style-editor textarea { display: block; width: 100%; min-height: 55vh; box-sizing: border-box; padding: 16px; resize: vertical; border: 1px solid var(--border-color); border-radius: 10px; background: #101012; color: #e4e4e7; font: 13px/1.55 Consolas, monospace; tab-size: 2; }
+.style-editor .style-editor-actions { display:flex; gap:10px; margin-top:14px; align-items:center; }
+.style-help { color:var(--text-secondary); line-height:1.55; max-width:900px; }
+
+.art-provider-tabs { display:inline-flex; width:max-content; max-width:100%; box-sizing:border-box; gap:4px; padding:4px; margin:14px 0 4px; border:1px solid #303033; border-radius:8px; background:#18181b; }
+.art-provider-tab { min-width:112px; padding:9px 20px; border:0; border-radius:5px; color:var(--text-secondary); background:transparent; font:inherit; font-weight:600; line-height:1.2; white-space:nowrap; cursor:pointer; transition:var(--transition); }
+.art-provider-tab:hover { color:var(--text-primary); }
+.art-provider-tab.active { color:var(--text-primary); background:#303033; box-shadow:0 1px 4px rgba(0,0,0,.25); }
+.provider-fields[hidden] { display:none; }
+@media (max-width: 480px) { .art-provider-tabs { display:flex; width:100%; } .art-provider-tab { flex:1 1 0; min-width:0; } }
+
+
+.in-app-page-overlay[data-page="settings"] { background: linear-gradient(180deg, #1c1c1e 0%, #000000 3%) fixed; }
