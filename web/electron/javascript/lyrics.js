@@ -7,8 +7,10 @@
     const lyricsStatus = document.getElementById('lyrics-status');
     const lyricsLines = document.getElementById('lyrics-lines');
     const lyricsImportInput = document.getElementById('lyrics-import-input');
+    const lyricsImportButton = document.getElementById('lyrics-import-btn');
     const lyricsSearchForm = document.getElementById('lyrics-search-form');
     const lyricsSearchTitle = document.getElementById('lyrics-search-title');
+    const lyricsSearchClear = document.getElementById('lyrics-search-clear');
     const lyricsSuggestions = document.getElementById('lyrics-search-suggestions');
     const lyricsSearchWrap = document.querySelector('.lyrics-search-wrap');
     const mainPlayer = document.getElementById('main-player');
@@ -24,17 +26,27 @@
     let activeLines = null;
     let suggestionRequestId = 0;
     let suggestionTimer = null;
+    let previouslyActiveSidebarButtons = [];
 
     function trackTitle(track) {
         return track?.data?.title || String(track?.name || '').replace(/\.[^/.]+$/, '') || 'Unknown Title';
     }
 
+    function updateLyricsSearchClear() {
+        if (lyricsSearchClear) lyricsSearchClear.hidden = !lyricsSearchTitle?.value;
+    }
+
     function artworkSource(track) {
         if (track?.imageUrl) return track.imageUrl;
         if (track?.imagePath && window.electronAPI?.toArtworkUrl) {
-            return window.electronAPI.toArtworkUrl(track.imagePath);
+            return window.electronAPI.toArtworkUrl(track.imagePath, 'cover');
         }
         return defaultCover;
+    }
+
+    function setLyricsArtwork(track) {
+        if (window.musicCommon?.setLazyArtwork) window.musicCommon.setLazyArtwork(lyricsCover, artworkSource(track));
+        else lyricsCover.src = artworkSource(track);
     }
 
     function parseSyncedLyrics(value) {
@@ -89,7 +101,7 @@
         const displayTitle = track?.lyricsSearchTitle || trackTitle(track);
         lyricsTitle.textContent = displayTitle;
         lyricsArtist.textContent = track?.data?.artist || 'Unknown Artist';
-        lyricsCover.src = artworkSource(track);
+        setLyricsArtwork(track);
         lyricsCover.alt = `${displayTitle} cover`;
         lyricsCover.onerror = () => { lyricsCover.src = defaultCover; };
         lyricsLines.replaceChildren();
@@ -169,7 +181,8 @@
             lyricsTitle.textContent = 'Nothing playing';
             lyricsArtist.textContent = '';
             if (lyricsSearchTitle) lyricsSearchTitle.value = '';
-            lyricsCover.src = defaultCover;
+            updateLyricsSearchClear();
+            setLyricsArtwork(null);
             lyricsStatus.textContent = 'Play a song to find its lyrics.';
             lyricsLines.replaceChildren();
             activeLines = null;
@@ -179,9 +192,10 @@
         const displayTitle = track.lyricsSearchTitle || trackTitle(track);
         lyricsTitle.textContent = displayTitle;
         lyricsArtist.textContent = track.data?.artist || 'Unknown Artist';
-        lyricsCover.src = artworkSource(track);
+        setLyricsArtwork(track);
         lyricsCover.alt = `${displayTitle} cover`;
         if (lyricsSearchTitle) lyricsSearchTitle.value = displayTitle;
+        updateLyricsSearchClear();
         lyricsStatus.textContent = 'Searching for lyrics…';
         lyricsLines.replaceChildren();
         activeLines = null;
@@ -197,6 +211,7 @@
                 track.lyrics = local;
                 track.lyricsSearchTitle = local.searchTitle || track.lyricsSearchTitle || '';
                 if (lyricsSearchTitle) lyricsSearchTitle.value = track.lyricsSearchTitle || trackTitle(track);
+                updateLyricsSearchClear();
                 renderLyrics(track, { status: 'found', ...local });
                 return;
             }
@@ -275,6 +290,7 @@
             button.append(title, details);
             button.addEventListener('click', () => {
                 lyricsSearchTitle.value = suggestion.trackName;
+                updateLyricsSearchClear();
                 setSuggestionsVisible(false);
                 searchLyricsByTitle(suggestion);
             });
@@ -406,8 +422,16 @@
     }
 
     function open() {
+        if (!lyricsView.classList.contains('is-visible')) {
+            previouslyActiveSidebarButtons = [...document.querySelectorAll('.sidebar_main_btn.active, .sidebar_btn.active')];
+        }
+        document.querySelectorAll('.sidebar_main_btn, .sidebar_btn').forEach(button => {
+            button.classList.remove('active');
+            button.removeAttribute('aria-current');
+        });
         lyricsView.classList.add('is-visible');
         lyricsNavButton.classList.add('active');
+        lyricsNavButton.setAttribute('aria-current', 'page');
         lyricsNavButton.setAttribute('aria-pressed', 'true');
         const track = getCurrentTrack();
         if (track?.path !== activeTrack?.path) loadLyrics(track);
@@ -417,7 +441,14 @@
     function close() {
         lyricsView.classList.remove('is-visible');
         lyricsNavButton.classList.remove('active');
+        lyricsNavButton.removeAttribute('aria-current');
         lyricsNavButton.setAttribute('aria-pressed', 'false');
+        previouslyActiveSidebarButtons.forEach(button => {
+            if (!button.isConnected) return;
+            button.classList.add('active');
+            button.setAttribute('aria-current', 'page');
+        });
+        previouslyActiveSidebarButtons = [];
     }
 
     lyricsNavButton.addEventListener('click', () => {
@@ -430,8 +461,18 @@
         await searchLyricsByTitle();
     });
     lyricsSearchTitle?.addEventListener('input', () => {
+        updateLyricsSearchClear();
         clearTimeout(suggestionTimer);
         suggestionTimer = setTimeout(loadLyricsSuggestions, 280);
+    });
+    lyricsSearchClear?.addEventListener('click', () => {
+        if (lyricsSearchTitle) {
+            lyricsSearchTitle.value = '';
+            lyricsSearchTitle.focus();
+        }
+        lyricsSearchClear.hidden = true;
+        clearTimeout(suggestionTimer);
+        setSuggestionsVisible(false);
     });
     lyricsSearchTitle?.addEventListener('keydown', event => {
         if (event.key === 'ArrowDown' && !lyricsSuggestions?.hidden) {
@@ -460,6 +501,7 @@
     document.addEventListener('click', event => {
         if (!lyricsSearchWrap?.contains(event.target)) setSuggestionsVisible(false);
     });
+    lyricsImportButton?.addEventListener('click', () => lyricsImportInput?.click());
     lyricsImportInput?.addEventListener('change', async event => {
         await importLyrics(event.target.files?.[0]);
         event.target.value = '';
