@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fancy Offline Music Player</title>
+    <link rel="stylesheet" href="../stylesheet/persistant.css">
+    <link rel="stylesheet" href="../stylesheet/home.css">
+    <link rel="stylesheet" href="../stylesheet/playlists.css">
+    <link rel="stylesheet" href="../stylesheet/settings.css">
+    <link rel="stylesheet" href="../stylesheet/credits.css">
+    <link rel="stylesheet" href="../stylesheet/app-shell.css">
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar_main">
+    <button class="sidebar_main_btn" id="home" data-nav="home">
+        <img src="../images/home.png" alt="Home" class="btn_icon">
+        <span>Home</span>
+    </button>
+    <button class="sidebar_main_btn" id="playlists" data-nav="playlists">
+        <img src="../images/playlist.png" alt="playlist" class="btn_icon">
+        <span>Playlists</span>
+    </button>
+    <button class="sidebar_main_btn" id="lyrics-nav-btn" type="button" aria-pressed="false">
+        <img src="../images/music.png" alt="" class="btn_icon">
+        <span>Lyrics</span>
+    </button>
+
+    </div>
+    <div class="sidebar_albums">
+        <div class="sidebar_section_title">Top songs</div>
+        <div class="sidebar_album_list" id="top-songs-list"></div>
+        <div class="sidebar_section_title">Top playlists</div>
+        <div class="sidebar_album_list" id="top-playlists-list"></div>
+    </div>
+    <div class="sidebar_footer">
+    <button class="sidebar_btn" id="settings" data-nav="settings">
+        <img src="../images/settings.png" alt="settings" class="btn_icon">
+        <span>Settings</span>
+    </button>
+
+    </div>
+</div>
+
+<main class="body_main" id="app-main">
+    <div class="app-topbar">
+        <div class="app-search-box" id="app-search-box">
+            <button class="app-search-toggle" id="app-search-toggle" type="button" aria-label="Search music library" aria-expanded="false" title="Search (Ctrl K)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg></button>
+            <input type="search" id="sidebar-search" placeholder="Search your library" autocomplete="off" aria-label="Search music library" tabindex="-1">
+            <kbd>Ctrl K</kbd>
+        </div>
+    </div>
+    <section class="app-view home-view" data-app-view="home">
+        <div class="header">
+        <img id="header-cover" src="../images/music.png" alt="Cover">
+        <div class="header-info">
+            <span id="header-label">Local Library</span>
+            <h1 id="header-title">Your Music</h1>
+            <div class="home-header-actions">
+                <label for="file-upload" class="upload-btn">Upload Music</label>
+                <input type="file" id="file-upload" multiple accept=".mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.weba,.webm">
+                <label class="home-sort-wrap" aria-label="Sort music"><select id="library-sort" data-trigger-icon="sort" aria-label="Sort music"><option value="custom">Custom order</option><option value="az">A–Z</option><option value="za">Z–A</option><option value="duration">Time</option><option value="played">Times played</option></select></label>
+                <div class="library-time-summary" id="library-time-summary" aria-live="polite">Calculating library time…</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tracklist-container">
+        <div class="tracklist-header">
+            <div title="Drag a song row to reorder">↕</div>
+            <div>Title</div>
+            <div>Album</div>
+            <div>Length</div>
+            <div></div>
+        </div>
+        <div class="tracklist" id="tracklist">
+        </div>
+        <div class="library-empty-state" id="library-empty-state" hidden></div>
+    </div>
+    </section>
+    <section class="app-view playlists-view" data-app-view="playlists" hidden>
+        <div id="grid-view">
+        <div class="header pl-library-header">
+            <div class="header-info">
+                <span>YOUR COLLECTION</span>
+                <h1>Your playlists</h1>
+            </div>
+            <button class="upload-btn pl-new-playlist-btn" id="open-create-playlist"><span aria-hidden="true">+</span> New playlist</button>
+        </div>
+
+        <div class="pl-scroll-container">
+            <div class="pl-section-head"><h2>Your collection</h2><div class="pl-section-tools"><span id="playlist-total-label">Loading playlists…</span><label class="pl-sort-wrap"><span>Sort</span><select id="playlist-sort" aria-label="Sort playlists"><option value="custom">Custom</option><option value="name">Name</option><option value="tracks">Most songs</option><option value="duration">Longest</option><option value="newest">Recently added</option></select></label></div></div>
+            <div class="pl-scroll" id="playlist-scroll"></div>
+        </div>
+    </div>
+
+    <div id="detail-view" style="display:none;">
+        <button class="pl-back-btn control-text-btn" id="back-to-grid">&#8592; Back to Playlists</button>
+
+        <div class="header pl-detail-hero">
+            <div class="pl-detail-cover-wrapper" id="detail-cover-wrapper" title="Click to change cover">
+                <img id="detail-cover" src="../images/music.png" alt="Cover">
+                <input type="file" id="detail-cover-input" accept="image/*" style="display:none;">
+            </div>
+
+            <div class="header-info">
+                <span>Playlist</span>
+                <h1 id="detail-name" contenteditable="true" spellcheck="false" title="Click to rename"></h1>
+                <p class="pl-detail-summary" id="detail-summary"></p>
+                <div class="pl-detail-actions">
+                    <button class="upload-btn pl-play-btn" id="play-playlist-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 12 7-12 7z"></path></svg><span>Play</span></button>
+                    <button class="upload-btn" id="add-existing-btn">+ Add Existing Song</button>
+                    <label class="upload-btn" for="detail-upload">+ Upload New Song</label>
+                    <input type="file" id="detail-upload" multiple accept=".mp3,.wav,.flac,.ogg,.oga,.opus,.m4a,.aac,.weba,.webm" style="display:none;">
+                    <button class="upload-btn pl-danger-btn" id="delete-playlist-btn">Delete Playlist</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tracklist-container">
+            <div class="tracklist-header">
+                <div title="Drag a song row to reorder">↕</div>
+                <div>Title</div>
+                <div>Album</div>
+                <div>Length</div>
+                <div></div>
+            </div>
+            <div class="tracklist" id="pl-tracklist"></div>
+            <div class="library-empty-state" id="playlist-empty-state" hidden></div>
+        </div>
+    </section>
+    <section class="app-view settings-view settings-page" data-app-view="settings" hidden>
+<div class="settings-container">
+
+  <div class="settings-section">
+    <div class="settings-section-title">Playback & Output</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Hardware Acceleration</span>
+        <span class="desc">Uses your device’s graphics processor to improve rendering. Restart the app to apply this change.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="hw-accel-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Startup Page</span>
+        <span class="desc">Choose which view opens when launch completes.</span>
+      </div>
+      <select class="select-dropdown" id="startup-page-select">
+        <option value="home">Home Library</option>
+        <option value="playlists">Playlists</option>
+      </select>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Compact Header</span>
+        <span class="desc">Shrink the Home and playlist headers as you scroll.</span>
+      </div>
+      <label class="switch" aria-label="Compact Header">
+        <input type="checkbox" id="home-header-collapse-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Automatically Switch to Mini Player</span>
+        <span class="desc">Switch to the compact player when the app window is too small.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="auto-mini-player-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Keep Mini Player on Top</span>
+        <span class="desc">Keep it above other windows. Minimized windows are never kept on top.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="mini-player-top-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Resume Last Session</span>
+        <span class="desc">Reopen the last playing track and position on launch.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="resume-session-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Default Volume</span>
+        <span class="desc">Set the starting playback volume when the app opens.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="default-volume-slider" min="0" max="100" value="80">
+        <span class="range-value" id="default-volume-value">80%</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Muted</span>
+        <span class="desc">Keep audio muted when the app starts.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="muted-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Discord Rich Presence</div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Show what is playing in Discord</span>
+        <span class="desc">Connects to the Discord desktop app and shows the current song. Create a Discord application and paste its Application ID below.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="discord-presence-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <label class="discord-setting-field"><span>Discord Application ID</span><input id="discord-client-id" type="text" inputmode="numeric" autocomplete="off" placeholder="Application ID"></label>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Show song artwork</span>
+        <span class="desc">Publishes a centered 1:1 PNG to your public GitHub repository so Discord can display it. A GitHub token with Contents write access is required.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="discord-art-toggle" checked>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <div class="art-provider-tabs" role="tablist" aria-label="Artwork storage provider"><button class="art-provider-tab active" type="button" role="tab" aria-selected="true" data-provider="github">GitHub</button><button class="art-provider-tab" type="button" role="tab" aria-selected="false" data-provider="imgur">Imgur</button></div><input type="hidden" id="discord-art-provider" value="github">
+    <p class="hotkey-status">GitHub stores covers in your public repository. Imgur uploads them to a public image link; create an Imgur API application and enter its Client ID below. Discord needs a public URL to show artwork.</p>
+    <div class="provider-fields" data-provider-fields="imgur" hidden><label class="discord-setting-field"><span>Imgur Client ID</span><input id="imgur-client-id" type="text" autocomplete="off" placeholder="Required when using Imgur"></label></div>
+    <div class="provider-fields" data-provider-fields="github"><label class="discord-setting-field"><span>GitHub username or organization</span><input id="github-owner" type="text" autocomplete="off" placeholder="owner"></label>
+    <label class="discord-setting-field"><span>Public repository name</span><input id="github-repository" type="text" autocomplete="off" placeholder="song-art"></label>
+    <label class="discord-setting-field"><span>Repository branch</span><input id="github-branch" type="text" autocomplete="off" placeholder="main"></label>
+    <label class="discord-setting-field"><span>GitHub personal access token</span><input id="github-token" type="password" autocomplete="new-password" placeholder="Stored encrypted on this device"></label>
+    </div>
+    <div class="discord-settings-actions">
+      <button class="btn" id="save-discord-settings-btn" type="button">Save Discord Settings</button>
+      <span id="discord-settings-status" role="status">Discord is disconnected.</span>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Appearance</div>
+    <div class="settings-row"><div class="settings-label"><span class="title">Custom Stylesheet</span><span class="desc">Edit CSS that applies across the player, settings, playlists, and credits.</span></div><button class="btn" id="open-style-editor" type="button">Style</button></div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Background Hotkeys</div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Enable Background Hotkeys</span>
+        <span class="desc">Use these shortcuts while the player is minimized or another app is in front. The toggle shortcut is Ctrl+Alt+F2.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="background-hotkeys-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <p class="hotkey-status" id="background-hotkey-status" role="status">Checking shortcut registration…</p>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Toggle Background Hotkeys</span></div><span class="hotkey-fixed">Ctrl + Alt + F2</span></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Fullscreen</span></div><button class="btn hotkey-capture" data-hotkey-name="fullscreen">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Play / Pause</span></div><button class="btn hotkey-capture" data-hotkey-name="playback">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Previous Track</span></div><button class="btn hotkey-capture" data-hotkey-name="previous">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Next Track</span></div><button class="btn hotkey-capture" data-hotkey-name="next">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Seek Back 5 Seconds</span></div><button class="btn hotkey-capture" data-hotkey-name="seekBack">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Seek Forward 5 Seconds</span></div><button class="btn hotkey-capture" data-hotkey-name="seekForward">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Volume Up</span></div><button class="btn hotkey-capture" data-hotkey-name="volumeUp">Set Shortcut</button></div>
+    <div class="settings-row hotkey-row"><div class="settings-label"><span class="title">Volume Down</span></div><button class="btn hotkey-capture" data-hotkey-name="volumeDown">Set Shortcut</button></div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Equalizer</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Bass</span>
+        <span class="desc">Low-shelf gain around 200Hz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-bass-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-bass-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Mid</span>
+        <span class="desc">Peaking gain around 1kHz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-mid-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-mid-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Treble</span>
+        <span class="desc">High-shelf gain around 3kHz.</span>
+      </div>
+      <div class="range-slider-container">
+        <input type="range" class="range-slider" id="eq-treble-slider" min="-15" max="15" step="1" value="0">
+        <span class="range-value" id="eq-treble-value">0dB</span>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Normalize Volume</span>
+        <span class="desc">Compress dynamic range so tracks sound closer in loudness.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="normalize-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Library</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Watch Folder</span>
+        <span class="desc" id="watch-folder-path">No folder selected. New audio files added to the selected folder are imported automatically.</span>
+      </div>
+      <div class="settings-actions">
+        <button class="btn" id="choose-watch-folder-btn">Choose Folder</button>
+        <button class="btn" id="clear-watch-folder-btn">Clear</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Export Backup</span>
+        <span class="desc">Save songs, playlists, settings, lyrics, and artwork in a portable .flib archive.</span>
+      </div>
+      <button class="btn btn-primary" id="export-data-btn">Export</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Import Backup</span>
+        <span class="desc">Restore a .flib archive, including songs. You’ll choose where to store the imported music; your current library will be replaced.</span>
+      </div>
+      <button class="btn" id="import-data-btn">Import</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">About</div>
+    <div class="settings-row">
+      <div class="settings-label"><span class="title">Privacy Policy</span><span class="desc">How this app handles local data and optional online services.</span></div>
+      <button class="btn" id="open-privacy-policy" type="button">Privacy Policy</button>
+    </div>
+    <div class="settings-row">
+      <div class="settings-label"><span class="title">Credits &amp; Licenses</span><span class="desc">Open-source credits and third-party licenses.</span></div>
+      <button class="btn" id="open-licenses" type="button">Licenses</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Danger Zone</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Clear Library</span>
+        <span class="desc">Removes every track from your library. Playlists are kept.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-tracks-btn">Clear Tracks</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Clear Playlists</span>
+        <span class="desc">Deletes every playlist you've created. Tracks are kept.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-playlists-btn">Clear Playlists</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Reset Everything</span>
+        <span class="desc">Wipes tracks and playlists. This cannot be undone.</span>
+      </div>
+      <button class="btn btn-danger" id="clear-all-btn">Reset Everything</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        <span class="title">Relaunch App</span>
+        <span class="desc">Restart to apply settings like Hardware Acceleration.</span>
+      </div>
+      <button class="btn" id="relaunch-btn">Relaunch</button>
+    </div>
+  </div>
+
+</div>
+<section class="style-editor" id="style-editor" hidden aria-label="Custom stylesheet editor">
+  <h1>Custom stylesheet</h1>
+  <p class="style-help">Write standard CSS. Your stylesheet is applied after the app styles on every page and saved on this device. Use the shared variables below to keep colors, borders, and spacing consistent.</p>
+  <textarea id="custom-stylesheet" spellcheck="false" aria-label="Custom CSS"></textarea>
+  <div class="style-editor-actions"><button class="btn" id="back-from-style" type="button">Back to Settings</button><button class="btn btn-primary" id="save-style" type="button">Save and Apply</button><button class="btn" id="reset-style" type="button">Restore default guide</button><span id="style-status" role="status"></span></div>
+</section>
+    </section>
+    <section class="app-view credits-view credits-page" data-app-view="credits" hidden>
+        <div class="credits-container">
+    <header class="credits-header">
+      <span class="credits-eyebrow">About this app</span>
+      <h1>Credits &amp; Licenses</h1>
+      <p>Thanks to the people and projects that make this music player possible.</p>
+    </header>
+
+    <section class="credits-section" aria-labelledby="app-credit-title">
+      <h2 id="app-credit-title">Application</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>Fancy Offline Music Player</h3>
+          <p>Developed by idebty</p>
+        </div>
+        <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU GPL 3.0</a>
+      </div>
+    </section>
+
+    <section class="credits-section" aria-labelledby="software-credit-title">
+      <h2 id="software-credit-title">Open-source software</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>Electron</h3>
+          <p>Desktop application framework</p>
+        </div>
+        <a href="https://github.com/electron/electron/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+      </div>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>electron-builder</h3>
+          <p>Application packaging and distribution</p>
+        </div>
+        <a href="https://github.com/electron-userland/electron-builder/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+      </div>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>jsmediatags</h3>
+          <p>Audio metadata and embedded artwork reading</p>
+        </div>
+        <a href="https://github.com/aadsm/jsmediatags/blob/master/LICENSE.md" target="_blank" rel="noopener noreferrer">BSD 3-Clause License</a>
+      </div>
+    </section>
+
+    <section class="credits-section" aria-labelledby="service-credit-title">
+      <h2 id="service-credit-title">Online services</h2>
+      <div class="credit-row">
+        <div class="credit-copy">
+          <h3>LRCLIB</h3>
+          <p>Online lyrics search and timed lyrics</p>
+        </div>
+        <a href="https://lrclib.net/" target="_blank" rel="noopener noreferrer">LRCLIB website</a>
+      </div>
+    </section>
+  </div>
+    </section>
+    <section class="app-view credits-view credits-page" data-app-view="privacy" hidden>
+      <div class="credits-container">
+        <header class="credits-header">
+          <span class="credits-eyebrow">Fancy Offline Music Player</span>
+          <h1>Privacy Policy</h1>
+          <p>Last updated November 21, 2026</p>
+        </header>
+        <section class="credits-section"><h2>Data collection</h2><p class="privacy-copy">This app does not collect or store personal data on our servers. It has no analytics, advertising, or account system. Your music library, playlists, preferences, imported lyrics, and artwork are stored locally on your device.</p></section>
+        <section class="credits-section"><h2>When information is sent</h2><p class="privacy-copy">Lyrics metadata is sent to LRCLIB when the app automatically looks up lyrics for a track and when you search or request suggestions. Discord activity and artwork are sent only when the optional integrations below are enabled and configured:</p><ul class="privacy-list"><li><strong>LRCLIB:</strong> When lyrics are looked up or suggestions are requested, the app sends relevant track metadata such as title, artist, album, and duration when available to LRCLIB. Requests are identified as Fancy Offline Music Player and are paced; the app honors LRCLIB Retry-After instructions when it returns 429 or 503. LRCLIB also receives your network request information, such as your IP address and the app’s client identifier. Lyrics you choose to save are stored locally. See <a href="https://lrclib.net/docs" target="_blank" rel="noopener noreferrer">LRCLIB API documentation</a>.</li><li><strong>Discord:</strong> If Discord Rich Presence is enabled, the app shares currently playing track details with the Discord desktop client. Discord may process or share that activity according to your Discord account settings and Discord’s privacy policy.</li><li><strong>GitHub or Imgur artwork:</strong> If Discord Rich Presence and artwork sharing are enabled and configured, the app may upload track artwork to the selected provider so Discord can display it. GitHub uploads use the repository and token you configure; Imgur uploads use the configured client ID. Provider terms and privacy practices apply.</li></ul></section>
+        <section class="credits-section"><h2>Your choices</h2><p class="privacy-copy">Lyrics lookups require an internet connection and send the metadata needed to search. Discord presence and artwork sharing are optional and can be disabled in Settings. You can remove local library, playlist, and settings data using the controls in Settings.</p></section>
+        <section class="credits-section"><h2>Contact</h2><p class="privacy-copy">This app does not operate a service that receives your library or account data. For LRCLIB API practices, contact LRCLIB through its official site.</p></section>
+      </div>
+    </section>    <section class="lyrics-view" id="lyrics-view" aria-live="polite" aria-label="Lyrics">
+        <img class="fullscreen-cover-bg" id="fullscreen-cover-bg" src="../images/music.png" alt="" aria-hidden="true">
+        <button id="fullscreen-exit-btn" class="fullscreen-exit-btn" type="button" title="Exit fullscreen player">Exit fullscreen</button>
+        <div class="lyrics-heading">
+            <img id="lyrics-cover" src="../images/music.png" alt="Album cover">
+            <div class="lyrics-track-info">
+                <span>Lyrics</span>
+                <h2 id="lyrics-title">Nothing playing</h2>
+                <p id="lyrics-artist"></p>
+                <span id="lyrics-status" class="lyrics-status">Play a song to find its lyrics.</span>
+                <div class="lyrics-search-wrap">
+                    <form class="lyrics-search" id="lyrics-search-form">
+                        <input type="search" id="lyrics-search-title" placeholder="Search by song title" aria-label="Search lyrics by song title" aria-controls="lyrics-search-suggestions" aria-expanded="false" aria-haspopup="listbox" autocomplete="off">
+                        <button type="button" class="lyrics-icon-btn lyrics-search-clear" id="lyrics-search-clear" title="Clear search" aria-label="Clear search" hidden><img src="../images/close.svg" alt=""></button>
+                        <button type="submit" class="lyrics-icon-btn" title="Search lyrics" aria-label="Search lyrics"><img src="../images/search.svg" alt=""></button>
+                    </form>
+                    <div class="lyrics-search-suggestions" id="lyrics-search-suggestions" role="listbox" aria-label="Song suggestions" hidden></div>
+                </div>
+                <div class="lyrics-actions">
+                    <button class="lyrics-icon-btn lyrics-import-icon-btn" id="lyrics-import-btn" type="button" title="Import lyrics" aria-label="Import lyrics"><img src="../images/upload.svg" alt=""></button>
+                </div>
+                <input type="file" id="lyrics-import-input" accept=".lrc,.txt,text/plain" style="display:none;">
+            </div>
+        </div>
+        <div class="lyrics-lines" id="lyrics-lines"></div>
+    </section>
+    <div class="player-bar">
+        <div class="mini-track-info" aria-live="polite">
+            <img class="mini-track-cover" id="mini-track-cover" src="../images/music.png" alt="">
+            <div class="mini-track-copy"><strong id="mini-track-title">Nothing playing</strong><span id="mini-track-artist"></span></div>
+        </div>
+        <button id="mini-player-toggle" class="mini-player-toggle" type="button" title="Return to full player" aria-label="Return to full player">↗</button>
+        <div class="player-progress">
+            <span class="time-label" id="time-current">0:00</span>
+            <input type="range" id="seek-slider" class="seek-slider" min="0" max="0" step="0.1" value="0">
+            <span class="time-label" id="time-duration">0:00</span>
+        </div>
+        <div class="player-main-row">
+            <div class="player-controls">
+
+                <button id="shuffle-btn" class="control-text-btn player-icon-btn" type="button" title="Shuffle" aria-label="Shuffle" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 7h2.5a5 5 0 0 1 3.54 1.46l4.92 4.92A5 5 0 0 0 18.5 15H21M16 16l5 5v-5M4 17h2.5a5 5 0 0 0 3.54-1.46M14 8l1.1-1.1A5 5 0 0 1 18.5 5H21"/></svg></button>
+                <button id="prev-btn" class="control-btn player-icon-btn" type="button" title="Previous track" aria-label="Previous track"><img src="../images/left.png" alt=""></button>
+                <button id="play-btn" class="control-btn play-btn-circle" type="button" aria-label="Play"><img id="play-icon" src="../images/play.png" alt="Play"></button>
+                <button id="next-btn" class="control-btn player-icon-btn" type="button" title="Next track" aria-label="Next track"><img src="../images/right.png" alt=""></button>
+                <button id="repeat-btn" class="control-text-btn player-icon-btn" type="button" title="Repeat off" aria-label="Repeat off" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></svg></button>
+            </div>
+        </div>
+        <div class="player-side-actions">
+            <button id="player-lyrics-btn" class="player-icon-btn" type="button" title="Open lyrics" aria-label="Open lyrics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></button>
+            <div class="player-queue-wrap">
+                <button id="queue-toggle-btn" class="player-icon-btn" type="button" title="Show queue" aria-label="Show queue" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"></path><path d="m17 15 4 3-4 3z"></path></svg></button>
+                <div class="queue-panel" id="queue-panel" hidden><div class="queue-panel-heading"><strong>Up next</strong><span id="queue-count">0 songs</span></div><div class="queue-list" id="queue-list"></div></div>
+            </div>
+            <div class="audio-output-wrap" id="audio-output-wrap" title="Audio output">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3z"></path><path d="M16 9a5 5 0 0 1 0 6M18.5 6.5a9 9 0 0 1 0 11"></path></svg>
+                <select id="audio-output-select" aria-label="Audio output device"><option value="default">Default output</option></select>
+            </div>
+                <div class="player-volume volume-container">
+                    <svg class="volume-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3z"></path><path d="M16 9a5 5 0 0 1 0 6"></path></svg>
+                    <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+                </div>
+                <div class="player-eq">
+    <button id="eq-toggle-btn" class="control-text-btn player-icon-btn" type="button" title="Equalizer" aria-label="Equalizer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14M12 5v14M20 5v14M2 9h4M10 15h4M18 8h4"/></svg></button>
+    <div class="eq-panel" id="eq-panel" style="display:none;">
+        <div class="eq-panel-heading">
+            <strong>Equalizer</strong>
+        </div>
+        <label class="eq-control" for="eq-bass">
+            <span class="eq-control-heading"><span>Bass</span><output id="eq-bass-readout">0 dB</output></span>
+            <input type="range" id="eq-bass" min="-15" max="15" step="1" value="0" aria-label="Bass gain">
+        </label>
+        <label class="eq-control" for="eq-mid">
+            <span class="eq-control-heading"><span>Mid</span><output id="eq-mid-readout">0 dB</output></span>
+            <input type="range" id="eq-mid" min="-15" max="15" step="1" value="0" aria-label="Mid gain">
+        </label>
+        <label class="eq-control" for="eq-treble">
+            <span class="eq-control-heading"><span>Treble</span><output id="eq-treble-readout">0 dB</output></span>
+            <input type="range" id="eq-treble" min="-15" max="15" step="1" value="0" aria-label="Treble gain">
+        </label>
+        <label class="eq-control eq-speed-control" for="playback-speed-slider">
+            <span class="eq-control-heading"><span>Playback speed</span><output id="playback-speed-readout">1×</output></span>
+            <input type="range" id="playback-speed-slider" min="0.5" max="2" step="0.05" value="1" aria-label="Playback speed">
+        </label>
+        <label class="eq-control eq-reverb-control" for="player-reverb-slider">
+            <span class="eq-control-heading"><span>Slow playback reverb</span><output id="player-reverb-readout">25%</output></span>
+            <input type="range" id="player-reverb-slider" min="0" max="0.6" step="0.01" value="0.25" aria-label="Reverb amount for slowed playback">
+        </label>
+        <label class="eq-normalize-toggle" for="player-normalize-toggle">
+            <input type="checkbox" id="player-normalize-toggle">
+            <strong>Normalize volume</strong>
+        </label>
+    </div>
+</div>
+        </div>
+        <button id="player-bar-minimize" class="player-bar-minimize" type="button" title="Minimize player bar" aria-label="Minimize player bar" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <audio id="main-player"></audio>
+    </div>
+</main>
+
+<div class="next-track-toast" id="next-track-toast" role="status" aria-live="polite" hidden>
+    <img class="next-track-toast-cover" id="next-track-toast-cover" src="../images/music.png" alt="">
+    <div class="next-track-toast-copy">
+        <span class="next-track-toast-label">UP NEXT</span>
+        <strong id="next-track-toast-title"></strong>
+        <span id="next-track-toast-artist"></span>
+        <small id="next-track-toast-duration"></small>
+    </div>
+    <button class="next-track-toast-close" id="next-track-toast-close" type="button" title="Dismiss" aria-label="Dismiss notification"><img src="../images/close.svg" alt=""></button>
+</div>
+
+<div class="pl-modal-backdrop" id="create-modal-backdrop" style="display:none;">
+    <div class="pl-modal">
+        <h2>New Playlist</h2>
+        <input type="text" id="new-playlist-name" placeholder="Playlist name" maxlength="80">
+        <div class="pl-modal-actions">
+            <button class="control-text-btn" id="cancel-create-playlist">Cancel</button>
+            <button class="upload-btn" id="confirm-create-playlist">Create</button>
+        </div>
+    </div>
+</div>
+<div class="pl-modal-backdrop" id="add-song-modal-backdrop" style="display:none;">
+    <div class="pl-modal pl-modal-wide">
+        <h2>Add From Library</h2>
+        <input type="text" id="add-song-search" placeholder="Search your library...">
+        <div class="pl-library-list" id="add-song-list"></div>
+        <div class="pl-modal-actions">
+            <button class="upload-btn" id="close-add-song-modal">Done</button>
+        </div>
+    </div>
+</div>
+
+<script src="../javascript/persistant.js" defer></script>
+<script src="../javascript/lyrics.js" defer></script>
+<script src="../javascript/home.js" defer></script>
+<script src="../javascript/playlists.js" defer></script>
+<script src="../javascript/settings.js" defer></script>
+</body>
+</html>
